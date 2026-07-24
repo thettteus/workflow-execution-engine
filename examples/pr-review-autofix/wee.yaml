@@ -1,9 +1,18 @@
 # Tool wiring this example needs (deny-first, PRIN-10 — nothing runs unless
 # allowlisted here). Review and proposed-fix generation work against public
 # PRs remotely through GitHub. workspaceRoot is only used by the local tail
-# (apply-fix/test/stage/commit); set WEE_WORKSPACE_ROOT to a writable checkout
-# before allowing those nodes to run. "go test ./..." only fits a Go repo —
-# swap it for whatever this target repo's own test command is.
+# (checkout-branch/apply-fix/test/stage/commit); set WEE_WORKSPACE_ROOT to a
+# writable checkout of the TARGET repo before allowing those nodes to run —
+# never this engine's own repo, and never a path under its .workflow/
+# directory: that directory is gitignored, and running `git add` from inside
+# a gitignored directory fails with "paths are ignored" (git reports the
+# ignored ancestor, not the file you asked for) before a commit is ever made.
+# "go test ./..." only fits a Go repo — swap it for whatever this target
+# repo's own test command is. The same host allowlist below also gates the
+# GitHub push/PR tail (create-blob/create-tree/create-commit/create-branch/
+# open-pr) — those calls need GITHUB_AUTH_HEADER to carry a token with WRITE
+# access to the target repo, not just the read access anonymous/public reads
+# get by default.
 workspaceRoot: ${WEE_WORKSPACE_ROOT:-.}
 terminal:
   allow: ["go"]

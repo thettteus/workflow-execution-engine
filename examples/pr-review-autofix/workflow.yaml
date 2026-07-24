@@ -3,8 +3,8 @@
 # (EXECUTION.md M1.14/M1.15). Every differentiator the project claims, in one
 # graph: three reviewers in parallel with a scoped context policy each, an LLM
 # Fixer whose own output is judged by a separate verifier before anything is
-# applied, real tool-backed test/commit steps, and node-cache reuse across
-# re-runs.
+# applied, real tool-backed test/commit steps, a real GitHub push/PR tail, and
+# node-cache reuse across re-runs.
 #
 # fetch-pr
 # fetch-diff
@@ -20,6 +20,10 @@
 #       verify-fix   (REQ-CONTRACT-05 — a separate, cheap judge; the producer
 #                     never gates itself, see verify-fix.worker.yaml)
 #         v (conditional: approved == true)
+#       push-plan    (composes branch name / Git Data API URLs / PR title+body)
+#         v
+#       checkout-branch (tool: git branch — local feature branch, not the base)
+#         v
 #       apply-fix    (tool: filesystem, writes fixer's corrected file)
 #         v
 #       test          (tool: terminal)
@@ -27,6 +31,18 @@
 #       stage         (tool: git add)
 #         v
 #       commit        (tool: git commit)
+#         v (ordering — nothing below touches GitHub before the local commit)
+#       get-base-commit (tool: http GET  — read-only, base commit's tree sha)
+#         v
+#       create-blob     (tool: http POST — the corrected file's new blob)
+#         v
+#       create-tree      (tool: http POST — base tree + the one changed blob)
+#         v
+#       create-commit    (tool: http POST — the new remote commit object)
+#         v
+#       create-branch    (tool: http POST — the remote ref, pointing at it)
+#         v
+#       open-pr          (tool: http POST — the pull request itself)
 #
 # read-original exists because fixer, given only the diff, has nothing to
 # copy the file's unchanged lines from. For public PRs, locate-file builds a
@@ -53,15 +69,43 @@
 # apply-fix's path/content are two separate fields, each its own whole-string
 # placeholder — never concatenated into one string, so the rule isn't hit.
 #
+# The GitHub push/PR tail (push-plan through open-pr) deliberately never uses
+# the git tool to reach a remote — core/tool/git has no push op by design
+# (git.go's own comment: "the engine never reaches a remote"). Landing the
+# fix on GitHub instead goes entirely through the generic http tool against
+# GitHub's Git Data API (blob -> tree -> commit -> ref), one POST per step,
+# exactly the "workflow-defined integration" ROADMAP.md/EXECUTION-PHASE2.md
+# describe for M2.5's Change Auto-Fix acceptance. Two http-tool gaps had to
+# close first, both closed alongside this graph (REQ-TOOL-06/07,
+# docs/spec/tools.md): the tool's body was a single opaque string with no way
+# to mix static JSON keys with a dynamic field (bodyJson, an input-side
+# per-field placeholder object, avoids a Worker hand-assembling and escaping
+# raw source as a JSON string literal); and there was no deterministic way to
+# carry an exact server-assigned value (a blob/tree/commit sha) from one
+# chained call into the next (bodyJson on the *response* side, parsed once,
+# so "${create-blob.bodyJson.sha}" resolves through the same lookupPath
+# walker every other tool placeholder already uses — never a Worker
+# transcribing a 40-character hex string by hand). GitHub's Git Data API
+# specifically (not the simpler Contents API) is what makes this possible
+# without base64: POST /git/blobs accepts "encoding": "utf-8" directly, and
+# no primitive to base64-encode arbitrary content exists anywhere in `core`.
+# Every write below is still a real POST to a real repo — each one pauses at
+# its own approval checkpoint (REQ-TOOL-05) with the request body shown
+# before it's sent, same as apply-fix/test/stage/commit; nothing here is
+# unattended by default.
+#
 # Requires (see README.md): OPENAI_API_KEY (or ANTHROPIC_API_KEY, per each
-# worker's model.provider) for the six LLM Workers. GitHub public PR reads are
-# anonymous by default, with optional GITHUB_AUTH_HEADER when the public API's
-# shared-IP quota is exhausted. A local checkout is only required for the
-# apply-fix/test/stage/commit tail; per-repo tuning (test command, timeouts,
-# budget) is expected — see M1.15's validation notes once run against real
-# repositories.
+# worker's model.provider) for the seven LLM Workers. GitHub public PR reads
+# are anonymous by default, with optional GITHUB_AUTH_HEADER when the public
+# API's shared-IP quota is exhausted — but GITHUB_AUTH_HEADER (a token with
+# write access to the target repo) is required, not optional, once
+# checkout-branch onward is allowed to run: creating a blob/tree/commit/ref
+# and opening a PR are all authenticated write calls. A local checkout is
+# only required for the apply-fix/test/stage/commit tail; per-repo tuning
+# (test command, timeouts, budget) is expected — see M1.15's validation notes
+# once run against real repositories.
 id: pr-review-autofix
-version: 1.1.1
+version: 1.2.0
 inputs:
   - name: prUrl
     required: true
@@ -112,6 +156,16 @@ nodes:
   - id: verify-fix
     worker: verify-fix@1.1.1
 
+  - id: push-plan
+    worker: push-plan@1.0.0
+
+  - id: checkout-branch
+    tool:
+      toolName: git
+      input:
+        op: branch
+        name: "${push-plan.branchName}"
+
   - id: apply-fix
     tool:
       toolName: filesystem
@@ -141,6 +195,89 @@ nodes:
         op: commit
         message: "${fixer.commitMessage}"
 
+  - id: get-base-commit
+    tool:
+      toolName: http
+      input:
+        method: GET
+        url: "${push-plan.baseCommitUrl}"
+        headers:
+          Accept: "application/vnd.github+json"
+          Authorization: "${env:GITHUB_AUTH_HEADER:-}"
+
+  - id: create-blob
+    tool:
+      toolName: http
+      input:
+        method: POST
+        url: "${push-plan.blobsUrl}"
+        headers:
+          Accept: "application/vnd.github+json"
+          Authorization: "${env:GITHUB_AUTH_HEADER:-}"
+        bodyJson:
+          content: "${fixer.content}"
+          encoding: "utf-8"
+
+  - id: create-tree
+    tool:
+      toolName: http
+      input:
+        method: POST
+        url: "${push-plan.treesUrl}"
+        headers:
+          Accept: "application/vnd.github+json"
+          Authorization: "${env:GITHUB_AUTH_HEADER:-}"
+        bodyJson:
+          base_tree: "${get-base-commit.bodyJson.tree.sha}"
+          tree:
+            - path: "${fixer.path}"
+              mode: "100644"
+              type: "blob"
+              sha: "${create-blob.bodyJson.sha}"
+
+  - id: create-commit
+    tool:
+      toolName: http
+      input:
+        method: POST
+        url: "${push-plan.commitsUrl}"
+        headers:
+          Accept: "application/vnd.github+json"
+          Authorization: "${env:GITHUB_AUTH_HEADER:-}"
+        bodyJson:
+          message: "${fixer.commitMessage}"
+          tree: "${create-tree.bodyJson.sha}"
+          parents:
+            - "${push-plan.baseSha}"
+
+  - id: create-branch
+    tool:
+      toolName: http
+      input:
+        method: POST
+        url: "${push-plan.refsUrl}"
+        headers:
+          Accept: "application/vnd.github+json"
+          Authorization: "${env:GITHUB_AUTH_HEADER:-}"
+        bodyJson:
+          ref: "${push-plan.refName}"
+          sha: "${create-commit.bodyJson.sha}"
+
+  - id: open-pr
+    tool:
+      toolName: http
+      input:
+        method: POST
+        url: "${push-plan.pullsUrl}"
+        headers:
+          Accept: "application/vnd.github+json"
+          Authorization: "${env:GITHUB_AUTH_HEADER:-}"
+        bodyJson:
+          title: "${push-plan.prTitle}"
+          head: "${push-plan.branchName}"
+          base: "${push-plan.baseRef}"
+          body: "${push-plan.prBody}"
+
 edges:
   - { from: fetch-pr, to: locate-file }
   - { from: fetch-diff, to: reviewer-a }
@@ -156,6 +293,11 @@ edges:
   - { from: fetch-diff, to: verify-fix }
   - { from: fixer, to: verify-fix }
   - { from: read-original, to: verify-fix }
+  - { from: fetch-pr, to: push-plan }
+  - { from: fixer, to: push-plan }
+  - { from: verify-fix, to: push-plan, condition: { path: approved, op: truthy } }
+  - { from: push-plan, to: checkout-branch }
+  - { from: checkout-branch, to: apply-fix }
   - { from: fixer, to: apply-fix }
   - { from: verify-fix, to: apply-fix, condition: { path: approved, op: truthy } }
   - { from: apply-fix, to: test }
@@ -163,9 +305,25 @@ edges:
   - { from: test, to: stage }
   - { from: fixer, to: commit }
   - { from: stage, to: commit }
+  - { from: push-plan, to: get-base-commit }
+  - { from: commit, to: get-base-commit }
+  - { from: push-plan, to: create-blob }
+  - { from: fixer, to: create-blob }
+  - { from: commit, to: create-blob }
+  - { from: push-plan, to: create-tree }
+  - { from: get-base-commit, to: create-tree }
+  - { from: create-blob, to: create-tree }
+  - { from: fixer, to: create-tree }
+  - { from: push-plan, to: create-commit }
+  - { from: fixer, to: create-commit }
+  - { from: create-tree, to: create-commit }
+  - { from: push-plan, to: create-branch }
+  - { from: create-commit, to: create-branch }
+  - { from: push-plan, to: open-pr }
+  - { from: create-branch, to: open-pr }
 
 budget:
-  maxCostUsd: 0.50
-  maxTokens: 150000
-  maxDurationMs: 180000
+  maxCostUsd: 0.60
+  maxTokens: 170000
+  maxDurationMs: 240000
   maxRetriesPerNode: 2

@@ -1,0 +1,85 @@
+# push-plan: composes every precomposed string the GitHub push/PR tail needs
+# (owner/repo/branch/URLs/title/body) from fetch-pr's PR JSON and fixer's
+# accepted correction — same job locate-file already does for
+# raw.githubusercontent.com URLs (README.md), extended to the write-side
+# Git Data API endpoints. A Worker does this, not a tool, because the engine's
+# placeholder resolver only ever substitutes a whole field verbatim
+# (core/engine/tool_input.go, ADR 0008) — it cannot concatenate "refs/heads/"
+# with a branch name, so every composed string a downstream http node needs
+# has to already exist as one field here. What it does NOT do: shuttle any
+# server-assigned id (a blob/tree/commit sha) between chained API calls — that
+# comes back from each POST's own response, parsed deterministically via the
+# HTTP tool's bodyJson output field (REQ-TOOL-07), never retyped by a model.
+id: push-plan
+version: 1.0.0
+description: Composes the branch name, GitHub Git Data API URLs, and PR title/body the push tail needs.
+objective: Read the reviewed PR's metadata and the accepted correction, then report the exact repo coordinates, a new branch name, every Git Data API URL the push tail will call, and a PR title/body.
+constraints:
+  - "owner and repo (used below to build every *Url field, but not reported as their own output fields — nothing downstream reads them separately) come from fetch-pr's own base.repo.full_name field, split on the single \"/\" — never invented, never the head repo (a fork's base can differ from its head)."
+  - baseSha and baseRef come from fetch-pr's own base.sha and base.ref fields verbatim.
+  - "branchName must be exactly \"wee-autofix-\" followed by fetch-pr's own number field, e.g. \"wee-autofix-1142\" — deterministic and reproducible from the PR number alone, never random."
+  - "refName must be exactly \"refs/heads/\" followed by branchName."
+  - "blobsUrl, treesUrl, commitsUrl, refsUrl, pullsUrl must each be \"https://api.github.com/repos/{owner}/{repo}/\" followed by, respectively, \"git/blobs\", \"git/trees\", \"git/commits\", \"git/refs\", \"pulls\" — owner/repo from base.repo.full_name, never a different repo."
+  - "baseCommitUrl must be exactly commitsUrl followed by \"/\" followed by baseSha."
+  - prTitle must be fixer's own commitMessage field verbatim, never rewritten.
+  - prBody must be a short plain-text paragraph built only from fixer's own summary field plus a disclosure that this PR was proposed by an automated review/fix workflow and should be read as a suggestion, not merged blind — never invent claims fixer's summary didn't make.
+tools: []
+contextPolicy:
+  mode: artifacts
+  params:
+    artifacts: [fetch-pr, fixer]
+contract:
+  goal: Report the branch name, Git Data API URLs, and PR title/body the push tail needs, each as one precomposed field.
+  rules:
+    - Every *Url field is a well-formed https://api.github.com/... URL for the repo named in fetch-pr's base.repo.full_name — never a different owner/repo, never the head repo.
+    - branchName and refName are deterministic functions of the PR number alone, reproducible across retries of the same run.
+  successCriteria:
+    - blobsUrl, treesUrl, commitsUrl, refsUrl, and pullsUrl each end in the literal path segment the constraint names, with no extra query string or trailing slash.
+    - baseCommitUrl exactly equals commitsUrl + "/" + baseSha.
+  maxRetries: 2
+  outputSchema:
+    type: object
+    additionalProperties: false
+    required: [baseSha, baseRef, branchName, refName, blobsUrl, treesUrl, commitsUrl, refsUrl, pullsUrl, baseCommitUrl, prTitle, prBody]
+    properties:
+      baseSha:
+        type: string
+        maxLength: 100
+      baseRef:
+        type: string
+        maxLength: 200
+      branchName:
+        type: string
+        maxLength: 200
+      refName:
+        type: string
+        maxLength: 220
+      blobsUrl:
+        type: string
+        maxLength: 500
+      treesUrl:
+        type: string
+        maxLength: 500
+      commitsUrl:
+        type: string
+        maxLength: 500
+      refsUrl:
+        type: string
+        maxLength: 500
+      pullsUrl:
+        type: string
+        maxLength: 500
+      baseCommitUrl:
+        type: string
+        maxLength: 600
+      prTitle:
+        type: string
+        maxLength: 100
+      prBody:
+        type: string
+        maxLength: 1000
+model:
+  provider: openai
+  model: gpt-4o-mini
+  params:
+    temperature: 0

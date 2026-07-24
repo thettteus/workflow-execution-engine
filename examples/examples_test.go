@@ -219,8 +219,8 @@ func TestPublishedTemplateCatalogDeclaresMutationSafety(t *testing.T) {
 				t.Errorf("%s required input hints = %+v, want required prUrl", entry.Name(), facts.Inputs)
 			}
 			workers := reg.Workers(wf)
-			if len(workers) != 6 {
-				t.Errorf("%s bundled Workers = %d, want 6", entry.Name(), len(workers))
+			if len(workers) != 7 {
+				t.Errorf("%s bundled Workers = %d, want 7", entry.Name(), len(workers))
 			}
 			for ref, worker := range workers {
 				if worker.Description == "" {
@@ -273,7 +273,7 @@ func TestFlagshipIsValid(t *testing.T) {
 	// M2.13's real run proved that artifact placeholders resolve only from a
 	// direct parent: each mutating node that reads fixer fields must retain its
 	// own data edge, independently of the ordering/gating edges.
-	fixerDataEdges := map[string]bool{"apply-fix": false, "stage": false, "commit": false}
+	fixerDataEdges := map[string]bool{"apply-fix": false, "stage": false, "commit": false, "push-plan": false, "create-blob": false, "create-tree": false, "create-commit": false}
 	for _, e := range wf.Edges {
 		if e.From == "fixer" {
 			if _, ok := fixerDataEdges[e.To]; ok {
@@ -287,7 +287,7 @@ func TestFlagshipIsValid(t *testing.T) {
 		}
 	}
 
-	for _, rel := range []string{"reviewer-a.worker.yaml", "reviewer-b.worker.yaml", "security-reviewer.worker.yaml", "locate-file.worker.yaml", "fixer.worker.yaml", "verify-fix.worker.yaml"} {
+	for _, rel := range []string{"reviewer-a.worker.yaml", "reviewer-b.worker.yaml", "security-reviewer.worker.yaml", "locate-file.worker.yaml", "fixer.worker.yaml", "verify-fix.worker.yaml", "push-plan.worker.yaml"} {
 		w := readWorker(t, "pr-review-autofix/"+rel)
 		if err := v.Validate(validate.KindWorker, w, nil); err != nil {
 			t.Errorf("%s failed schema validation:\n%v", rel, err)
@@ -309,8 +309,8 @@ func TestFlagshipIsValid(t *testing.T) {
 			deterministicNodes++
 		}
 	}
-	if modelNodes != 6 || deterministicNodes != 7 {
-		t.Errorf("model/deterministic split = %d/%d, want 6/7 (M2.12 published diagram)", modelNodes, deterministicNodes)
+	if modelNodes != 7 || deterministicNodes != 14 {
+		t.Errorf("model/deterministic split = %d/%d, want 7/14 (push-plan + the GitHub push/PR tail)", modelNodes, deterministicNodes)
 	}
 	if facts := registry.DeriveTemplateFacts(wf); !facts.WriteCapable {
 		t.Error("pr-review-autofix must remain visibly write-capable; approval checkpoints guard its mutations")

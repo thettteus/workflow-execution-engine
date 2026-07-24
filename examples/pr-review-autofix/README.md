@@ -17,6 +17,10 @@ fetch-diff
         v
       verify-fix   (REQ-CONTRACT-05 — a separate, cheap judge; see below)
         v (conditional: approved == true)
+      push-plan    (composes branch name / Git Data API URLs / PR title+body)
+        v
+      checkout-branch (tool: git branch — a local feature branch, not the base)
+        v
       apply-fix    (tool: filesystem, writes fixer's corrected file)
         v
       test          (tool: terminal)
@@ -24,6 +28,18 @@ fetch-diff
       stage         (tool: git add)
         v
       commit        (tool: git commit)
+        v (ordering — nothing below touches GitHub before the local commit)
+      get-base-commit (tool: http GET  — read-only, the base commit's tree sha)
+        v
+      create-blob     (tool: http POST — the corrected file's new blob)
+        v
+      create-tree      (tool: http POST — base tree + the one changed blob)
+        v
+      create-commit    (tool: http POST — the new remote commit object)
+        v
+      create-branch    (tool: http POST — the remote ref, pointing at it)
+        v
+      open-pr          (tool: http POST — the pull request itself)
 ```
 
 Three independent reviewers, each scoped to see only the diff (`contextPolicy: {mode: artifacts,
@@ -33,7 +49,48 @@ for why `artifacts` mode, not `diff-only`, is what actually works here); a `loca
 not just the diff — to base its rewrite on (see "Disclosed, current limitation" below for the failure this
 closes); a Fixer
 whose own output is judged by a separate `verify-fix` Worker before anything touches a file; real
-tool-backed apply/test/stage/commit steps; node-cache reuse across re-runs.
+tool-backed apply/test/stage/commit steps; a real GitHub push/PR tail; node-cache reuse across re-runs.
+
+## The GitHub push/PR tail
+
+`push-plan` through `open-pr` land the accepted fix on GitHub as a real branch and a real pull request —
+without ever asking the `git` tool to push. `core/tool/git` deliberately has no push op (its own header
+comment: "the engine never reaches a remote") — landing the change instead goes entirely through the
+generic `http` tool against GitHub's Git Data API, one POST per step (create blob → create tree → create
+commit → create ref → open PR), exactly the "workflow-defined integration" pattern
+[ROADMAP.md](../../docs/ROADMAP.md)/[EXECUTION-PHASE2.md](../../docs/EXECUTION-PHASE2.md) describe for
+M2.5's Change Auto-Fix acceptance.
+
+Building this surfaced two real gaps in the `http` tool, both closed alongside this graph
+([docs/spec/tools.md](../../docs/spec/tools.md) REQ-TOOL-06/07):
+
+- **REQ-TOOL-06 (request side):** the tool's body used to be one opaque string — no way to mix a static
+  JSON key (`"encoding": "utf-8"`) with a dynamic one (the file's own content) without a Worker
+  hand-assembling and escaping an entire JSON document itself. `bodyJson` resolves each field individually
+  through the same whole-string placeholder mechanism every other tool input already uses
+  (`core/engine/tool_input.go`, ADR 0008) — no new templating engine, no string concatenation.
+- **REQ-TOOL-07 (response side):** chaining GitHub's Git Data API means each step's input is the
+  *previous* step's server-assigned sha, known only after that call runs. Routing an exact 40-character hex
+  string through a Worker risks exactly the kind of transcription error that would silently corrupt the
+  chain. The response now carries a parsed `bodyJson` field alongside the raw `body` string whenever the
+  body is itself a JSON object/array, so `"${create-blob.bodyJson.sha}"` resolves deterministically through
+  the engine's existing `lookupPath` walker — never retyped by a model.
+
+GitHub's Git Data API (not the simpler Contents API) is what makes this possible without base64 at all: its
+blob-creation endpoint accepts `"encoding": "utf-8"` directly, and no base64 primitive exists anywhere in
+`core` — the Contents API, by contrast, requires base64 unconditionally.
+
+`push-plan` is the one Worker in this tail, and it does only what an LLM is actually suited for here:
+composing precomposed strings (URLs, a branch name, a PR title/body) the same way `locate-file` already
+composes a raw.githubusercontent.com URL — never shuttling an exact server-assigned id, which is what
+REQ-TOOL-07 is for instead.
+
+Every POST in this tail — `create-blob`, `create-tree`, `create-commit`, `create-branch`, `open-pr` — is a
+real, authenticated write to a real repository, and every one of them pauses at its own approval checkpoint
+(REQ-TOOL-05) with the request body shown before it sends, exactly like `apply-fix`/`test`/`stage`/`commit`
+already do. Nothing here is unattended by default: a full run now pauses **nine** times (branch checkout,
+write, test, stage, local commit, blob, tree, commit, ref+PR — `create-branch` and `open-pr` are the eighth
+and ninth), not four.
 
 ## Five-minute public demo path (M2.12)
 
@@ -49,17 +106,22 @@ stage, and commit after explicit approvals.
 3. In **Settings → Model providers**, add or update the `openai` connection and
    set its key. In the Run dialog, supply a public GitHub PR API URL such as
    `https://api.github.com/repos/OWNER/REPO/pulls/N`.
-4. On the imported canvas, point out the published split: **6 model** nodes and
-   **7 deterministic** nodes. Select one of each. The Inspector shows the
+4. On the imported canvas, point out the published split: **7 model** nodes and
+   **14 deterministic** nodes. Select one of each. The Inspector shows the
    Worker's name/version/description and resolved `provider / model-id`, or an
    explicit **no model** plus the recorded Tool name/version.
 5. Run. Review/fix proposal generation may proceed without workspace mutation.
    If `verify-fix` approves a proposed correction, execution pauses before
-   `apply-fix`; inspect the formatted change, affected path, command/API
+   `checkout-branch`; inspect the formatted change, affected path, command/API
    preview, and remaining budget. Nothing mutating has run at this point.
 6. Reject to demonstrate the safe stop, or approve only in the disposable
-   clone. Later mutating steps (`test`, `stage`, `commit`) remain independently
-   checkpointed; approval of one operation never approves another.
+   clone. Later mutating steps (`checkout-branch`, `test`, `stage`, `commit`,
+   and the `create-blob`/`create-tree`/`create-commit`/`create-branch`/
+   `open-pr` GitHub push/PR tail) remain independently checkpointed; approval
+   of one operation never approves another. The push/PR tail additionally
+   requires `GITHUB_AUTH_HEADER` to carry write access to the target repo —
+   without it, `create-blob` fails loud with GitHub's own 401/403 rather than
+   silently skipping.
 
 What this demo proves now: the real gallery bundle imports through the canonical
 workflow path; model/deterministic identity is visible and tied to the frozen
@@ -87,24 +149,31 @@ Requires:
   REQ-INPUT-01): the specific PR diff URL this run reviews. Supply it with
   `wee run workflow.yaml --input prUrl=https://api.github.com/repos/OWNER/REPO/pulls/N`, or pick it in the
   UI's Run dialog after importing the template — either way it's recorded in the run's audit trail.
-- Public GitHub PR reads are anonymous by default. If the shared-IP quota is exhausted, set
-  `GITHUB_AUTH_HEADER` to `Bearer <token>` in Settings; it is sent but never recorded.
+- Public GitHub PR reads are anonymous by default. If the shared-IP quota is exhausted — or once
+  `checkout-branch` onward is allowed to run at all — set `GITHUB_AUTH_HEADER` to `Bearer <token>` in
+  Settings; it is sent but never recorded. The push/PR tail (`create-blob` through `open-pr`) needs a token
+  with **write** access to the target repo, not just enough to lift the anonymous read quota.
 - A `wee.yaml` allowlisting GitHub hosts plus the terminal command this repo's tests/build run with (`go`
-  by default here). The workspace root is only used by the local tail (`apply-fix`/`test`/`stage`/`commit`);
-  point it at a real git checkout before allowing those nodes to run.
-- `OPENAI_API_KEY` (or `ANTHROPIC_API_KEY`, per each Worker's `model.provider`) for the six LLM Workers.
+  by default here). The workspace root is only used by the local tail (`checkout-branch`/`apply-fix`/`test`/
+  `stage`/`commit`); point it at a real disposable git checkout of the **target** repo before allowing those
+  nodes to run — never this engine's own repo, and never a path under its own `.workflow/` directory (that
+  directory is gitignored; `git add` from inside a gitignored directory fails before any commit is made).
+- `OPENAI_API_KEY` (or `ANTHROPIC_API_KEY`, per each Worker's `model.provider`) for the seven LLM Workers.
 
 Per-repo tuning (test command, timeouts, budget) is expected — this bundle's defaults are a starting point,
 not a one-size-fits-all config. See "Real-repo validation" below for what tuning three actual repos needed.
 
 ## Expected cost
 
-Six LLM Workers per run: three `gpt-4o-mini` reviewers (parallel, cheap), one `gpt-4o-mini` `locate-file`
-(cheap — path + raw URL extraction), one `gpt-4.1` fixer (the expensive call), and one `gpt-4.1` verifier.
-A typical run costs a few cents and can approach fifteen cents for a larger corrected file — see the real
-figures below — inside the workflow's own `maxCostUsd: 0.50` ceiling; a run where `verify-fix` rejects the fix skips
-`apply-fix` onward and costs less still. The actual figure for any specific run is real accounting, not an
-estimate — see it via `wee inspect <id>` or the UI's Metrics panel
+Seven LLM Workers per run: three `gpt-4o-mini` reviewers (parallel, cheap), one `gpt-4o-mini` `locate-file`
+(cheap — path + raw URL extraction), one `gpt-4.1` fixer (the expensive call), one `gpt-4.1` verifier, and one
+`gpt-4o-mini` `push-plan` (cheap — composes the branch name/API URLs/PR title+body, gated behind
+`verify-fix`'s approval so a rejected fix never pays for it). The GitHub push/PR tail itself
+(`get-base-commit` through `open-pr`) is all deterministic `http` tool calls — no further model cost. A
+typical run costs a few cents and can approach fifteen cents for a larger corrected file — see the real
+figures below — inside the workflow's own `maxCostUsd: 0.60` ceiling; a run where `verify-fix` rejects the fix skips
+`checkout-branch` onward (including the entire push/PR tail) and costs less still. The actual figure for any
+specific run is real accounting, not an estimate — see it via `wee inspect <id>` or the UI's Metrics panel
 ([concepts/budget.md](../../docs/concepts/budget.md)).
 
 ## Flagship public proof (M2.13)
