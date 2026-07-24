@@ -5,12 +5,11 @@ import { CommandPalette } from './components/CommandPalette'
 import { Inspector } from './components/Inspector'
 import { NotificationCenter } from './components/NotificationCenter'
 import { ResizeHandle } from './components/ResizeHandle'
-import { RunTabs } from './components/RunTabs'
 import { SettingsModal } from './components/SettingsModal'
+import { TabBar } from './components/TabBar'
 import { TemplateGallery } from './components/TemplateGallery'
 import { Timeline } from './components/Timeline'
 import { Toolbar } from './components/Toolbar'
-import { WorkspaceTabs } from './components/WorkspaceTabs'
 import { usePersistedSize } from './core/resizable'
 import { useThemeMode } from './core/theme'
 import { useWorkspace } from './store'
@@ -71,8 +70,7 @@ export default function App() {
 
   return (
     <div className="app-shell token-shell flex h-screen flex-col">
-      <RunTabs />
-      <WorkspaceTabs />
+      <TabBar />
       <Toolbar
         onOpenPalette={() => setPaletteOpen(true)}
         onOpenTemplates={() => setGalleryOpen(true)}
