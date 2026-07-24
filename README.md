@@ -37,10 +37,11 @@ Everyone is programming their organization's processes, not prompting a model. S
 Phase 1 (MVP) is complete through the engine, CLI, SDK, and interface (M1.0–M1.15); the old M1.16/M1.17
 release gates are superseded by the Phase 2 local-first product-hardening plan.
 
-Phase 2 is in progress. The durable local control plane, safe mutation checkpoints, and self-hosted
-packaging path are implemented through **M2.6**. The next sequential milestone is M2.7 (team
-self-hosting). See [docs/ROADMAP.md](docs/ROADMAP.md) and
-[docs/EXECUTION-PHASE2.md](docs/EXECUTION-PHASE2.md).
+Phase 2 is in progress. The durable local control plane, safe mutation checkpoints, self-hosted packaging,
+connections, the visual/notifications shell, and a real flagship PR-review-and-fix run against a public
+repository are complete (M2.0–M2.6, M2.9–M2.13). The next sequential milestone is M2.7 (team self-hosting).
+See [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/EXECUTION-PHASE2.md](docs/EXECUTION-PHASE2.md) — its
+`## Status` section is the authoritative, current picture.
 
 There is no v1-stable API yet.
 

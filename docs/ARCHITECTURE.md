@@ -9,8 +9,10 @@
 ## Component map
 
 Two languages, one boundary — Go below the event stream, TypeScript only in `ui/` (ADR 0002). Nodes marked
-`✅` exist today (M1.0–M1.12); `▢` are specified but not yet built, tagged with the milestone that delivers
-them.
+`✅` exist today; `▢` are specified but not yet built, tagged with the milestone that delivers them. Phase 1
+(M1.0–M1.15) is complete; Phase 2 hardening is in progress (see [ROADMAP.md](ROADMAP.md) and
+[EXECUTION-PHASE2.md](EXECUTION-PHASE2.md) for the authoritative milestone-by-milestone status) — this
+diagram includes what Phase 2 has added to the component map so far.
 
 ```mermaid
 graph TB
@@ -33,19 +35,22 @@ graph TB
         Policy["policy ✅ M1.4 — resolves each Worker's context slice"]
         Model["model/openai, model/anthropic ✅ M1.4 —\nhand-rolled net/http clients (ADR 0006)"]
         Cost["cost ✅ M1.4 — per-call token/$ accounting"]
-        Tool["tool ✅ M1.5 — filesystem, terminal, git, http (sandboxed, PRIN-10);\ntool-backed graph nodes ✅ M1.6a (ADR 0008)"]
+        Tool["tool ✅ M1.5 — filesystem, terminal, git, http (sandboxed, PRIN-10);\ntool-backed graph nodes ✅ M1.6a (ADR 0008); structured JSON request/\nresponse bodies ✅ (REQ-TOOL-06/07)"]
+        Diagnostic["diagnostic ✅ M2.4 — structured error taxonomy:\nevery failure names its node, kind, and likely fix"]
+        Security["security ✅ M2.4 — secret/API-key scanning across\nevents, artifacts, cache, and exports"]
         Cache["cache ✅ M1.6 — content-addressed node cache"]
         Replay["replay ✅ M1.7 — zero-cost audit replay + re-execution + divergence"]
         Registry["registry ✅ M1.8 — immutable versioned definitions,\nWorkerSource + hash-pinning + portable export"]
         Store["store ✅ — content-addressed artifact store"]
         EventLog["eventlog ✅ — append-only JSONL, hash-chained (ADR 0007)"]
-        Server["server ✅ M1.12 — HTTP + WebSocket (ADR 0010, coder/websocket);\ntails the log, lists/audits executions, starts runs"]
+        Settings["settings ✅ M2.2/M2.9 — durable non-secret settings\n+ Connections (model providers, change sources)"]
+        Server["server ✅ M1.12 — HTTP + WebSocket (ADR 0010, coder/websocket);\ntails the log, lists/audits executions, starts/cancels/resumes runs ✅ M2.2;\ngates mutating tool calls behind an approval checkpoint ✅ M2.5 (ADR 0016)"]
     end
 
     subgraph Clients["Clients — no second source of truth"]
         CLI["cli/ ✅ M1.9 — wee binary (run/replay/inspect/validate/export/cache/init/list/serve)"]
         SDKPkg["sdk/ ✅ M1.10 — Go authoring SDK, in-process (builder + Run + typed artifacts)"]
-        UI["ui/ ✅ M1.11 — React + TypeScript visual builder;\nlive event stream ✅ M1.12, inspector/artifacts ▢ M1.13"]
+        UI["ui/ ✅ M1.11 — React + TypeScript visual builder;\nlive event stream ✅ M1.12, inspector/artifacts ✅ M1.13;\nconnections/theme/notifications ✅ M2.9–M2.11"]
     end
 
     YAML --> Serialize
@@ -64,6 +69,9 @@ graph TB
     Engine --> Cost
     Engine --> Store
     Engine --> EventLog
+    Engine --> Diagnostic
+    Security -.scans.-> EventLog
+    Security -.scans.-> Store
     Cache -.keys via.-> Canonical
     Store -.addresses via.-> Canonical
     Registry --> Engine
@@ -77,6 +85,7 @@ graph TB
     CLI --> Server
     EventLog -->|"--json"| CLI
     EventLog --> Server
+    Server --> Settings
     Server -->|"WebSocket (ADR 0010)"| UI
 ```
 
@@ -137,11 +146,22 @@ sequenceDiagram
 | `registry` / versioning | [spec/versioning.md](spec/versioning.md) |
 | `cli/`, `sdk/`, `ui/` | [spec/cli.md](spec/cli.md), [spec/sdk.md](spec/sdk.md), [spec/ui.md](spec/ui.md) |
 | `server` live event transport (WebSocket, `coder/websocket`) | [spec/ui.md](spec/ui.md) REQ-UI-02, [ADR 0010](adr/0010-websocket-transport.md) |
+| `diagnostic` structured error taxonomy | [spec/runtime.md](spec/runtime.md) |
+| `security` secret/API-key scanning and redaction | [spec/security.md](spec/security.md) |
+| `settings` durable non-secret settings + Connections | [spec/connections.md](spec/connections.md), [spec/control-plane.md](spec/control-plane.md), [ADR 0012](adr/0012-local-control-plane.md), [ADR 0013](adr/0013-connections-model.md) |
+| Safe-mutation approval checkpoints (pause before a mutating tool call) | [ADR 0016](adr/0016-safe-mutation-approval-checkpoints.md) |
 
 ## The flagship graph, for scale
 
 The component map above is the engine; the shape it's built to run well is the flagship demo — see
-[VISION.md → Flagship Demo](VISION.md#flagship-demo) for the PR Review & Auto-Fix graph (3 parallel
-reviewers, each context-policy-scoped to the diff, feeding a Fixer → Test Runner → Commit). That graph
-exercises every box above at once: parallel dispatch, context policies, contract enforcement, cache,
-budget, and the event stream the UI renders live.
+[VISION.md → Flagship Demo](VISION.md#flagship-demo) for the conceptual shape (parallel reviewers feeding a
+Fixer → Test Runner → Commit) and
+[examples/pr-review-autofix/README.md](../examples/pr-review-autofix/README.md) for the concrete, currently
+implemented graph: 3 parallel reviewers plus a `locate-file`/`read-original` pair that hands the Fixer the
+real base file, a `fixer` whose own output is judged by a separate `verify-fix` Worker before anything is
+applied, a local `apply-fix` → `test` → `stage` → `commit` tail, and — landing the accepted fix on GitHub
+for real — a `push-plan` Worker plus a `checkout-branch`/`get-base-commit`/`create-blob`/`create-tree`/
+`create-commit`/`create-branch`/`open-pr` tail that speaks GitHub's Git Data API directly through the `http`
+tool (REQ-TOOL-06/07), since `core/tool/git` deliberately never reaches a remote. 21 nodes total (7 model /
+14 deterministic). That graph exercises every box above at once: parallel dispatch, context policies,
+contract enforcement, cache, budget, approval checkpoints, and the event stream the UI renders live.
