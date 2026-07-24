@@ -172,6 +172,156 @@ func TestFailOnStatusRejectsHTTPErrorBody(t *testing.T) {
 	}
 }
 
+// TestBodyJSONSentAsRequestBody: bodyJson is marshaled verbatim as the
+// request body (REQ-TOOL-06) — the engine has already resolved any
+// placeholder leaves inside it by the time Execute sees the input.
+func TestBodyJSONSentAsRequestBody(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer srv.Close()
+
+	host := hostOf(t, srv.URL)
+	tool := httptool.New([]string{host}, srv.Client())
+	_, err := tool.Execute(context.Background(), json.RawMessage(`{
+		"method": "POST",
+		"url": "`+srv.URL+`",
+		"bodyJson": {"content": "package middleware\n\nfunc x() {}\n", "encoding": "utf-8"}
+	}`))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var got struct {
+		Content  string `json:"content"`
+		Encoding string `json:"encoding"`
+	}
+	if err := json.Unmarshal([]byte(gotBody), &got); err != nil {
+		t.Fatalf("server received non-JSON body %q: %v", gotBody, err)
+	}
+	if got.Content != "package middleware\n\nfunc x() {}\n" || got.Encoding != "utf-8" {
+		t.Errorf("got body %+v", got)
+	}
+}
+
+func TestBodyJSONSetsContentTypeWhenAbsent(t *testing.T) {
+	var gotContentType string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotContentType = r.Header.Get("Content-Type")
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer srv.Close()
+
+	host := hostOf(t, srv.URL)
+	tool := httptool.New([]string{host}, srv.Client())
+	_, err := tool.Execute(context.Background(), json.RawMessage(`{
+		"method": "POST",
+		"url": "`+srv.URL+`",
+		"bodyJson": {"a": 1}
+	}`))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if gotContentType != "application/json" {
+		t.Errorf("Content-Type = %q, want application/json", gotContentType)
+	}
+}
+
+func TestBodyJSONRespectsExplicitContentType(t *testing.T) {
+	var gotContentType string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotContentType = r.Header.Get("Content-Type")
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer srv.Close()
+
+	host := hostOf(t, srv.URL)
+	tool := httptool.New([]string{host}, srv.Client())
+	_, err := tool.Execute(context.Background(), json.RawMessage(`{
+		"method": "POST",
+		"url": "`+srv.URL+`",
+		"headers": {"Content-Type": "application/vnd.github+json"},
+		"bodyJson": {"a": 1}
+	}`))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if gotContentType != "application/vnd.github+json" {
+		t.Errorf("Content-Type = %q, want the workflow-supplied value preserved", gotContentType)
+	}
+}
+
+func TestBodyAndBodyJSONAreMutuallyExclusive(t *testing.T) {
+	tool := httptool.New([]string{"example.com"}, nil)
+	_, err := tool.Execute(context.Background(), json.RawMessage(`{
+		"method": "POST",
+		"url": "https://example.com",
+		"body": "raw",
+		"bodyJson": {"a": 1}
+	}`))
+	if err == nil {
+		t.Fatal("expected body and bodyJson together to be rejected")
+	}
+}
+
+// TestBodyJSONResponseFieldIsParsed: a JSON-object response body is exposed a
+// second time, already parsed, as bodyJson (REQ-TOOL-07) — so a downstream
+// tool node can reference an exact field deterministically.
+func TestBodyJSONResponseFieldIsParsed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"sha":"abc123","tree":{"sha":"def456"}}`)
+	}))
+	defer srv.Close()
+
+	host := hostOf(t, srv.URL)
+	tool := httptool.New([]string{host}, srv.Client())
+	out, err := tool.Execute(context.Background(), json.RawMessage(`{"method":"GET","url":"`+srv.URL+`"}`))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var r struct {
+		Body     string `json:"body"`
+		BodyJSON struct {
+			Sha  string `json:"sha"`
+			Tree struct {
+				Sha string `json:"sha"`
+			} `json:"tree"`
+		} `json:"bodyJson"`
+	}
+	if err := json.Unmarshal(out, &r); err != nil {
+		t.Fatalf("decode output: %v", err)
+	}
+	if r.BodyJSON.Sha != "abc123" || r.BodyJSON.Tree.Sha != "def456" {
+		t.Errorf("got bodyJson %+v", r.BodyJSON)
+	}
+	if r.Body == "" {
+		t.Error("raw body string should still be present alongside bodyJson")
+	}
+}
+
+func TestBodyJSONResponseAbsentForNonJSONBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "package middleware\n")
+	}))
+	defer srv.Close()
+
+	host := hostOf(t, srv.URL)
+	tool := httptool.New([]string{host}, srv.Client())
+	out, err := tool.Execute(context.Background(), json.RawMessage(`{"method":"GET","url":"`+srv.URL+`"}`))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var r map[string]any
+	if err := json.Unmarshal(out, &r); err != nil {
+		t.Fatalf("decode output: %v", err)
+	}
+	if _, present := r["bodyJson"]; present {
+		t.Error("bodyJson should be absent when the response body is not a JSON object/array")
+	}
+}
+
 type rewriteHostTransport struct {
 	base      http.RoundTripper
 	targetURL string

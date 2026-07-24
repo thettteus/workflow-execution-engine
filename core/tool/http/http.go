@@ -2,10 +2,21 @@
 // domain allowlist (REQ-TOOL-03, PRIN-10). A request to a host not on the list
 // fails with a distinct error before any connection is attempted. The allowlist
 // is matched on host (optionally with a leading-dot suffix for subdomains); an
-// empty allowlist denies everything.
+// empty allowlist denies everything. A POST body is either the plain string
+// `body`, or the structured `bodyJson` object (REQ-TOOL-06) — the latter lets
+// a workflow mix static JSON keys with dynamic per-field placeholder values,
+// since the engine's whole-string placeholder resolver already walks into
+// nested objects/arrays before Execute ever sees the input. The response
+// mirrors this: whenever the response body itself parses as a JSON object or
+// array, the output carries it a second time, already parsed, as `bodyJson`
+// (REQ-TOOL-07) — so a chained API call (e.g. GitHub's blob → tree → commit →
+// ref sequence) can reference an exact upstream field like
+// "${prior-node.bodyJson.sha}" deterministically, without a Worker
+// transcribing the value.
 package http
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -63,7 +74,8 @@ func (t *Tool) InputSchema() []byte {
     },
     "failOnStatus": { "type": "boolean" },
     "headers": { "type": "object", "additionalProperties": { "type": "string" } },
-    "body": { "type": "string" }
+    "body": { "type": "string" },
+    "bodyJson": { "type": "object" }
   }
 }`)
 }
@@ -75,7 +87,8 @@ func (t *Tool) OutputSchema() []byte {
   "required": ["status", "body"],
   "properties": {
     "status": { "type": "integer" },
-    "body": { "type": "string" }
+    "body": { "type": "string" },
+    "bodyJson": {}
   }
 }`)
 }
@@ -87,6 +100,7 @@ type request struct {
 	FailOnStatus bool              `json:"failOnStatus"`
 	Headers      map[string]string `json:"headers"`
 	Body         string            `json:"body"`
+	BodyJSON     json.RawMessage   `json:"bodyJson"`
 }
 
 type rewriteRule struct {
@@ -115,8 +129,16 @@ func (t *Tool) Execute(ctx context.Context, input json.RawMessage) (json.RawMess
 		return nil, fmt.Errorf("http: host %q is not on the workflow domain allowlist; add it under http.allow in the workflow directory's wee.yaml", u.Hostname())
 	}
 
+	hasBodyJSON := len(req.BodyJSON) > 0
+	if hasBodyJSON && req.Body != "" {
+		return nil, fmt.Errorf("http: body and bodyJson are mutually exclusive")
+	}
+
 	var bodyReader io.Reader
-	if req.Body != "" {
+	switch {
+	case hasBodyJSON:
+		bodyReader = bytes.NewReader(req.BodyJSON)
+	case req.Body != "":
 		bodyReader = strings.NewReader(req.Body)
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, req.Method, requestURL, bodyReader)
@@ -129,6 +151,9 @@ func (t *Tool) Execute(ctx context.Context, input json.RawMessage) (json.RawMess
 		}
 		httpReq.Header.Set(k, v)
 	}
+	if hasBodyJSON && httpReq.Header.Get("Content-Type") == "" {
+		httpReq.Header.Set("Content-Type", "application/json")
+	}
 
 	resp, err := t.client.Do(httpReq)
 	if err != nil {
@@ -140,7 +165,26 @@ func (t *Tool) Execute(ctx context.Context, input json.RawMessage) (json.RawMess
 	if req.FailOnStatus && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
 		return nil, fmt.Errorf("http: request returned status %d for %s: %s", resp.StatusCode, displayURL(u), previewBody(body))
 	}
-	out, err := json.Marshal(map[string]any{"status": resp.StatusCode, "body": string(body)})
+
+	result := map[string]any{"status": resp.StatusCode, "body": string(body)}
+	// bodyJson is a best-effort convenience: when the response is itself a
+	// JSON object or array, expose it a second time, already parsed, so a
+	// downstream tool node can dereference an exact field (e.g.
+	// "${prior-node.bodyJson.sha}") through the engine's existing lookupPath
+	// walker (REQ-TOOL-07) — deterministic field passing between chained API
+	// calls, instead of routing an exact token like a commit sha through a
+	// Worker that could transcribe it wrong. The leading-byte check skips the
+	// unmarshal entirely for a response that plainly isn't an object/array
+	// (plain text, HTML, a large raw file read) — those bodies are the
+	// common case for e.g. raw.githubusercontent.com reads, and needlessly
+	// decoding one into a generic map/slice tree would be wasted work no
+	// caller asked for. json.RawMessage carries the original bytes straight
+	// through to the final Marshal below verbatim, with no re-encoding.
+	if trimmed := bytes.TrimSpace(body); len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') && json.Valid(trimmed) {
+		result["bodyJson"] = json.RawMessage(trimmed)
+	}
+
+	out, err := json.Marshal(result)
 	if err != nil {
 		return nil, fmt.Errorf("http: encode output: %w", err)
 	}

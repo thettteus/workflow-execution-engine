@@ -50,3 +50,33 @@ mutating; filesystem read/list, git status/diff/branch-list, and HTTP GET are re
 - **Delivered by:** M2.5. **Verified by:** per-tool `DescribeMutation` coverage through
   `engine.TestMutatingToolPausesBeforeToolCalledUntilApproved`,
   `TestUnattendedMutationOptInBypassesApproval`, and the existing built-in tool test suites.
+
+### REQ-TOOL-06 — Structured JSON request bodies
+The HTTP tool shall accept an optional `bodyJson` object input alongside its existing string `body`, so a
+workflow can send a POST request whose body mixes static JSON structure with dynamic per-field values —
+without a Worker hand-assembling and escaping an entire JSON document as one string. Each leaf value inside
+`bodyJson` resolves through the same whole-string placeholder mechanism every other tool input already uses
+(`resolveToolInput`, ADR 0008) — no new templating engine, no string concatenation. When present, `bodyJson`
+is marshaled verbatim as the request body and the tool sets `Content-Type: application/json` unless the
+workflow already supplied one.
+- **Rationale:** closes a real gap found wiring `pr-review-autofix`'s forge-PR path (M2.5's Change Auto-Fix
+  acceptance) — GitHub's Git Data API (blob/tree/commit/ref creation) needs a JSON body carrying a dynamic
+  field (e.g. file content) next to static keys (e.g. `"encoding": "utf-8"`); the prior string-only `body`
+  could only ever hold one whole-string placeholder, never a composed document.
+- **Delivered by:** M2.5 follow-up. **Verified by:** `http.TestBodyJSONSentAsRequestBody`,
+  `TestBodyJSONSetsContentTypeWhenAbsent`, `TestBodyJSONRespectsExplicitContentType`.
+
+### REQ-TOOL-07 — Deterministic response-field chaining
+When an HTTP tool call's response body itself parses as a JSON object or array, the engine shall expose it
+already-parsed as an additional `bodyJson` output field (alongside the existing raw-string `body`), so a
+downstream tool node can reference an exact field (`"${node-id.bodyJson.path}"`) through the same
+placeholder walker every other tool input already uses — no Worker is asked to transcribe an exact token
+(a commit sha, a blob sha) between two chained API calls, which is a real risk (a single mistranscribed
+hex character invalidates the whole chain) a plain string-passing Worker could not reliably avoid.
+`bodyJson` is absent whenever the body isn't a JSON object/array (plain text, HTML, a bare scalar) — `body`
+remains the one field every caller can always depend on.
+- **Rationale:** the same `pr-review-autofix` forge-PR path as REQ-TOOL-06 needs to chain GitHub's Git Data
+  API (create blob → create tree → create commit → create ref) — each step's input is the *previous* step's
+  server-assigned sha, known only after that call actually runs.
+- **Delivered by:** M2.5 follow-up. **Verified by:** `http.TestBodyJSONResponseFieldIsParsed`,
+  `TestBodyJSONResponseAbsentForNonJSONBody`.
