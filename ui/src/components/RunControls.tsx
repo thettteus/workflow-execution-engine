@@ -99,14 +99,14 @@ export function RunControls() {
         </span>
       )}
       {connected && (
-        <button type="button" className="btn" onClick={() => void cancel()} title="Cancel this run">
+        <button type="button" className="btn shrink-0" onClick={() => void cancel()} title="Cancel this run">
           Cancel
         </button>
       )}
       {resumable && (
         <button
           type="button"
-          className="btn"
+          className="btn shrink-0"
           onClick={() => void retry()}
           title="Resume this execution: reuse finished nodes, re-run the rest (does not re-pay for completed work)"
         >
@@ -116,7 +116,7 @@ export function RunControls() {
       {terminal && (
         <button
           type="button"
-          className="btn"
+          className="btn shrink-0"
           onClick={() => void reexecute()}
           title="Re-run the frozen workflow as a new execution; unchanged nodes are served from cache"
         >
@@ -126,7 +126,7 @@ export function RunControls() {
       {terminal && (
         <button
           type="button"
-          className="btn"
+          className="btn shrink-0"
           onClick={() => void clearNodeCache()}
           title="Clear this execution's cached nodes so the next run recomputes them"
         >
@@ -135,7 +135,7 @@ export function RunControls() {
       )}
       {execId && (
         <a
-          className="btn"
+          className="btn shrink-0"
           href={bundleUrl(serverUrl, execId)}
           title="Download a portable bundle (snapshot + events + artifacts) for this execution"
           data-testid="export-bundle"

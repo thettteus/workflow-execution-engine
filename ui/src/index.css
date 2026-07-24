@@ -143,6 +143,7 @@ body {
   font-size: 12px;
   color: var(--color-text-muted);
   cursor: pointer;
+  white-space: nowrap;
   transition:
     background var(--motion-fast),
     border-color var(--motion-fast),
