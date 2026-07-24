@@ -333,8 +333,8 @@ the entry.
 
 > **Secrets are references, never values** (NFR-SEC-01). The key is read from the environment at call time;
 > it is never written into a definition, an artifact, the event log, or an export. Workflows that need a
-> token (e.g. the `github-pr-review` example) reference it as `${env:GITHUB_TOKEN}`, and the resolved value
-> is redacted before anything is persisted.
+> token (e.g. the `github-pr-review` example) reference it as `${env:GITHUB_AUTH_HEADER:-}`, and the resolved
+> value is redacted before anything is persisted.
 
 Budgets are enforced *before* the next call, not after the invoice. Override a workflow's cost ceiling for a
 run:
