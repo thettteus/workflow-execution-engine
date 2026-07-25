@@ -8,7 +8,25 @@ A lot of engineering knowledge still lives in documents, Slack threads, scripts,
 
 LLMs can execute parts of a workflow, but they do not control the system. `wee` is not an AI agent framework, chat product, or prompt builder.
 
+## Proof, not a mockup
+
+The flagship graph below is 21 real nodes (7 model, 14 deterministic) — three parallel reviewers, a Fixer
+whose own output is judged by a separate verifier, and a real write/test/stage/commit tail — running end to
+end against a live repository:
+
+![The pr-review-autofix workflow mid-run in the wee UI: 21 nodes, cost and token counts per node, run monitor timeline, SUCCEEDED 21/21 at $0.0105](docs/assets/pr-review-autofix-run.png)
+
+That run's accepted fix became a real GitHub pull request, opened by the workflow itself through GitHub's
+Git Data API — not a mocked write:
+
+![A real GitHub pull request opened by the pr-review-autofix workflow: "fix Sum to include first element in summation", checks passed, ready to merge](docs/assets/pr-review-autofix-pr-opened.png)
+
+The full flagship proof — three real public-repo targets, two safe rejections, one successful fix, exact
+token/cost figures — is in [docs/CASE-STUDY.md](docs/CASE-STUDY.md).
+
 ## Why
+
+**Engineer the context. Delegate to the model only what actually fits in it.**
 
 LLM inference got cheaper. The amount of inference software performs did not.
 
@@ -161,6 +179,7 @@ See the `Makefile` for the full command list and configurable variables includin
 
 Start with [AGENTS.md](AGENTS.md), the index for the project's documentation:
 
+- case study: [docs/CASE-STUDY.md](docs/CASE-STUDY.md) — the flagship demo's real run, in narrative form
 - constitution: binding rules and invariants
 - vision: why the project exists
 - specs: testable requirements
