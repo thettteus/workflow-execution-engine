@@ -3,8 +3,8 @@ package registry
 import (
 	"fmt"
 
-	"github.com/tzpereira/workflow-execution-engine/core/canonical"
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/canonical"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
 )
 
 // Kind names the sort of definition a reference points at, for error messages

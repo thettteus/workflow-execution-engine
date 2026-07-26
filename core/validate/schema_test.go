@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tzpereira/workflow-execution-engine/core/serialize"
-	"github.com/tzpereira/workflow-execution-engine/core/validate"
+	"github.com/thettteus/workflow-execution-engine/core/serialize"
+	"github.com/thettteus/workflow-execution-engine/core/validate"
 )
 
 func TestNewValidatorCompilesAllSchemas(t *testing.T) {

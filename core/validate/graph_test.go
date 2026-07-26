@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
-	"github.com/tzpereira/workflow-execution-engine/core/serialize"
-	"github.com/tzpereira/workflow-execution-engine/core/validate"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/serialize"
+	"github.com/thettteus/workflow-execution-engine/core/validate"
 )
 
 func TestGraphAcceptsValidDiamond(t *testing.T) {

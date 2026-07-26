@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
-	"github.com/tzpereira/workflow-execution-engine/core/eventlog"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/eventlog"
 )
 
 // TestReconstructTimelineFromDiskAlone is the M1.2 acceptance test: an

@@ -3,7 +3,7 @@ package registry_test
 import (
 	"testing"
 
-	"github.com/tzpereira/workflow-execution-engine/core/registry"
+	"github.com/thettteus/workflow-execution-engine/core/registry"
 )
 
 func TestValidVersion(t *testing.T) {

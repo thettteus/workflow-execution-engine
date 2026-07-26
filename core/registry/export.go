@@ -7,9 +7,9 @@ import (
 	"io"
 	"strings"
 
-	"github.com/tzpereira/workflow-execution-engine/core/canonical"
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
-	"github.com/tzpereira/workflow-execution-engine/core/serialize"
+	"github.com/thettteus/workflow-execution-engine/core/canonical"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/serialize"
 )
 
 // archive layout: one workflow.json plus one workers/<id@version>.json per

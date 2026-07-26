@@ -13,10 +13,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
-	"github.com/tzpereira/workflow-execution-engine/cli/internal/render"
-	"github.com/tzpereira/workflow-execution-engine/cli/internal/runner"
-	"github.com/tzpereira/workflow-execution-engine/core/engine"
-	"github.com/tzpereira/workflow-execution-engine/core/replay"
+	"github.com/thettteus/workflow-execution-engine/cli/internal/render"
+	"github.com/thettteus/workflow-execution-engine/cli/internal/runner"
+	"github.com/thettteus/workflow-execution-engine/core/engine"
+	"github.com/thettteus/workflow-execution-engine/core/replay"
 )
 
 const cliSmokeWorkflow = `id: cli-smoke

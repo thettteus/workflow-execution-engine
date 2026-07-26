@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
-	"github.com/tzpereira/workflow-execution-engine/core/registry"
-	"github.com/tzpereira/workflow-execution-engine/core/serialize"
-	"github.com/tzpereira/workflow-execution-engine/core/validate"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/registry"
+	"github.com/thettteus/workflow-execution-engine/core/serialize"
+	"github.com/thettteus/workflow-execution-engine/core/validate"
 )
 
 // TestExamplesAreValid loads every shipped example and validates it against the

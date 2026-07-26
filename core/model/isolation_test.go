@@ -20,7 +20,7 @@ import (
 // package itself, and the single wiring site core/model/providers. Anything else
 // is a leak.
 func TestVendorTypesDoNotLeak(t *testing.T) {
-	const modulePath = "github.com/tzpereira/workflow-execution-engine"
+	const modulePath = "github.com/thettteus/workflow-execution-engine"
 	guarded := map[string]bool{
 		modulePath + "/core/model/openai":    true,
 		modulePath + "/core/model/anthropic": true,

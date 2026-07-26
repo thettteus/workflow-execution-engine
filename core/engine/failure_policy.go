@@ -1,6 +1,6 @@
 package engine
 
-import "github.com/tzpereira/workflow-execution-engine/core/domain"
+import "github.com/thettteus/workflow-execution-engine/core/domain"
 
 // failurePolicyOf returns a node's failure policy, defaulting to fail-execution
 // (a node failure halts the whole execution) when the node declares none.

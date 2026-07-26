@@ -4,6 +4,6 @@
 // its own to the domain (PRIN-02). See docs/spec/cli.md (REQ-CLI-*).
 package main
 
-import "github.com/tzpereira/workflow-execution-engine/cli/cmd"
+import "github.com/thettteus/workflow-execution-engine/cli/cmd"
 
 func main() { cmd.Main() }

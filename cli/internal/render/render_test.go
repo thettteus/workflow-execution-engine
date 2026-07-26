@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
-	"github.com/tzpereira/workflow-execution-engine/core/engine"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/engine"
 )
 
 func ev(t domain.EventType, node string, payload map[string]any) domain.Event {

@@ -8,9 +8,9 @@
 package providers
 
 import (
-	"github.com/tzpereira/workflow-execution-engine/core/model"
-	"github.com/tzpereira/workflow-execution-engine/core/model/anthropic"
-	"github.com/tzpereira/workflow-execution-engine/core/model/openai"
+	"github.com/thettteus/workflow-execution-engine/core/model"
+	"github.com/thettteus/workflow-execution-engine/core/model/anthropic"
+	"github.com/thettteus/workflow-execution-engine/core/model/openai"
 )
 
 // Config overrides the built-in providers' API roots (REQ-MODEL-04) — e.g. to

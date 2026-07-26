@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
-	"github.com/tzpereira/workflow-execution-engine/core/eventlog"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/eventlog"
 )
 
 // writeChain writes a snapshot and a short run of events, returning the base dir.

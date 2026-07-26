@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tzpereira/workflow-execution-engine/core/model"
+	"github.com/thettteus/workflow-execution-engine/core/model"
 )
 
 // defaultBaseURL is the public OpenAI API root. Override it with WithBaseURL to

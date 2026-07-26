@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	gittool "github.com/tzpereira/workflow-execution-engine/core/tool/git"
+	gittool "github.com/thettteus/workflow-execution-engine/core/tool/git"
 )
 
 // initRepo makes a temp git repo with identity configured so commits work in CI.

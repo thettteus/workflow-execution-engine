@@ -3,7 +3,7 @@ package providers_test
 import (
 	"testing"
 
-	"github.com/tzpereira/workflow-execution-engine/core/model/providers"
+	"github.com/thettteus/workflow-execution-engine/core/model/providers"
 )
 
 func TestConfiguredRegistersOpenAICompatibleProviderByConnectionID(t *testing.T) {

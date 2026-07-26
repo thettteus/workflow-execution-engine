@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tzpereira/workflow-execution-engine/core/model"
-	"github.com/tzpereira/workflow-execution-engine/core/model/openai"
+	"github.com/thettteus/workflow-execution-engine/core/model"
+	"github.com/thettteus/workflow-execution-engine/core/model/openai"
 )
 
 // TestBaseURLOverrideTalksToStub is REQ-MODEL-04: the OpenAI client with an

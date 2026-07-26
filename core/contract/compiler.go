@@ -13,9 +13,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
-	"github.com/tzpereira/workflow-execution-engine/core/model"
-	"github.com/tzpereira/workflow-execution-engine/core/policy"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/model"
+	"github.com/thettteus/workflow-execution-engine/core/policy"
 )
 
 // Compile turns a Worker, its policy-resolved context, and optional retry

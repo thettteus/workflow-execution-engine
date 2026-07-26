@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tzpereira/workflow-execution-engine/core/model"
-	"github.com/tzpereira/workflow-execution-engine/core/model/anthropic"
+	"github.com/thettteus/workflow-execution-engine/core/model"
+	"github.com/thettteus/workflow-execution-engine/core/model/anthropic"
 )
 
 // TestCompleteAgainstStub is REQ-MODEL-03: the hand-rolled client posts to

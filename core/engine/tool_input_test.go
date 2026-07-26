@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
 )
 
 func fixtureInputs() []NodeInput {

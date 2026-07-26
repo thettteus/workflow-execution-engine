@@ -6,8 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
-	"github.com/tzpereira/workflow-execution-engine/core/tool"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/tool"
 )
 
 // fakeTool is a scriptable Tool for exercising Invoke without touching the world.

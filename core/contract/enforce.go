@@ -3,8 +3,8 @@ package contract
 import (
 	"fmt"
 
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
-	"github.com/tzpereira/workflow-execution-engine/core/validate"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/validate"
 )
 
 // ViolationError means a Worker's output failed its Contract's output schema.

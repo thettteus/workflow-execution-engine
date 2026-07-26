@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/tzpereira/workflow-execution-engine/core/serialize"
+	"github.com/thettteus/workflow-execution-engine/core/serialize"
 )
 
 // newListCmd implements `wee list` (REQ-CLI-01): the workflows in the current

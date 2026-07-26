@@ -6,9 +6,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
-	"github.com/tzpereira/workflow-execution-engine/core/engine"
-	"github.com/tzpereira/workflow-execution-engine/core/model"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/engine"
+	"github.com/thettteus/workflow-execution-engine/core/model"
 )
 
 // fakeProvider is a scriptable model.Provider: it returns outputs[i] on call i

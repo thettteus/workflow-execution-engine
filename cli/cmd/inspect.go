@@ -6,10 +6,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
-	"github.com/tzpereira/workflow-execution-engine/core/eventlog"
-	"github.com/tzpereira/workflow-execution-engine/core/replay"
-	"github.com/tzpereira/workflow-execution-engine/core/store"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/eventlog"
+	"github.com/thettteus/workflow-execution-engine/core/replay"
+	"github.com/thettteus/workflow-execution-engine/core/store"
 )
 
 // newInspectCmd implements `wee inspect <executionId>` (REQ-CLI-01): a per-node

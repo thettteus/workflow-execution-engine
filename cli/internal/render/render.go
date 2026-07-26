@@ -6,8 +6,8 @@
 package render
 
 import (
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
-	"github.com/tzpereira/workflow-execution-engine/core/engine"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/engine"
 )
 
 // Renderer consumes an execution's events as they arrive and a final result.

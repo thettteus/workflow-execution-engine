@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	httptool "github.com/tzpereira/workflow-execution-engine/core/tool/http"
+	httptool "github.com/thettteus/workflow-execution-engine/core/tool/http"
 )
 
 // TestAllowedHostSucceeds: a GET to an allowlisted host returns status + body.

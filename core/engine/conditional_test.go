@@ -3,7 +3,7 @@ package engine
 import (
 	"testing"
 
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
 )
 
 func TestEvalCondition(t *testing.T) {

@@ -15,9 +15,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tzpereira/workflow-execution-engine/core/diagnostic"
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
-	"github.com/tzpereira/workflow-execution-engine/core/validate"
+	"github.com/thettteus/workflow-execution-engine/core/diagnostic"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/validate"
 )
 
 // Tool is the single interface every tool implements (REQ-TOOL-01). Input and

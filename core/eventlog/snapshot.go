@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/tzpereira/workflow-execution-engine/core/canonical"
+	"github.com/thettteus/workflow-execution-engine/core/canonical"
 )
 
 // WriteSnapshot freezes the fully-resolved graph + config for an execution to

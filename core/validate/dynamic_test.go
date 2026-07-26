@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tzpereira/workflow-execution-engine/core/validate"
+	"github.com/thettteus/workflow-execution-engine/core/validate"
 )
 
 // scoreIssuesSchema is the acceptance-test contract shape: {score:number,

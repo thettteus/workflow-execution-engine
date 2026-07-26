@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/tzpereira/workflow-execution-engine/core/cache"
-	"github.com/tzpereira/workflow-execution-engine/core/serialize"
+	"github.com/thettteus/workflow-execution-engine/core/cache"
+	"github.com/thettteus/workflow-execution-engine/core/serialize"
 )
 
 // config is the optional wee.yaml a workflow directory may carry to configure

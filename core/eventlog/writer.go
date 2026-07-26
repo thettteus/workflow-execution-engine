@@ -16,8 +16,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/tzpereira/workflow-execution-engine/core/canonical"
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/canonical"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
 )
 
 const (

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tzpereira/workflow-execution-engine/core/diagnostic"
+	"github.com/thettteus/workflow-execution-engine/core/diagnostic"
 )
 
 func TestWrapPreservesCauseAndPayload(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
 )
 
 // GraphError is a workflow graph-validation failure carrying one Problem per

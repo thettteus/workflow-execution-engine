@@ -3,10 +3,10 @@ package sdk_test
 import (
 	"testing"
 
-	"github.com/tzpereira/workflow-execution-engine/core/canonical"
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
-	"github.com/tzpereira/workflow-execution-engine/core/serialize"
-	"github.com/tzpereira/workflow-execution-engine/sdk"
+	"github.com/thettteus/workflow-execution-engine/core/canonical"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/serialize"
+	"github.com/thettteus/workflow-execution-engine/sdk"
 )
 
 func reviewer(id string) domain.Worker {

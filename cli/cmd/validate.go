@@ -5,9 +5,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
-	"github.com/tzpereira/workflow-execution-engine/core/serialize"
-	"github.com/tzpereira/workflow-execution-engine/core/validate"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/serialize"
+	"github.com/thettteus/workflow-execution-engine/core/validate"
 )
 
 // newValidateCmd implements `wee validate <workflow.yaml>` (REQ-CLI-01),

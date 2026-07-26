@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tzpereira/workflow-execution-engine/core/model"
+	"github.com/thettteus/workflow-execution-engine/core/model"
 )
 
 const (

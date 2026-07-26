@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/tzpereira/workflow-execution-engine/core/engine"
+	"github.com/thettteus/workflow-execution-engine/core/engine"
 )
 
 // Artifact returns a node's output artifact decoded into T (REQ-SDK-02). It

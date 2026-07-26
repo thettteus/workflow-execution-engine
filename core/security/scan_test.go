@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/tzpereira/workflow-execution-engine/core/security"
+	"github.com/thettteus/workflow-execution-engine/core/security"
 )
 
 func TestScanFilesForSecretsFindsForbiddenBytes(t *testing.T) {

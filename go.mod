@@ -1,4 +1,4 @@
-module github.com/tzpereira/workflow-execution-engine
+module github.com/thettteus/workflow-execution-engine
 
 go 1.23
 

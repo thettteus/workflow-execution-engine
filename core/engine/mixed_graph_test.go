@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
-	"github.com/tzpereira/workflow-execution-engine/core/engine"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/engine"
 )
 
 // TestMixedGraphRunsThroughRealScheduler is the M1.6a acceptance test: a

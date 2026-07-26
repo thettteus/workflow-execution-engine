@@ -13,7 +13,7 @@ package policy
 import (
 	"fmt"
 
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
 )
 
 // Item is one upstream artifact available to a node: the producing node's id,

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tzpereira/workflow-execution-engine/core/store"
+	"github.com/thettteus/workflow-execution-engine/core/store"
 )
 
 func artifactCount(t *testing.T, base string) int {

@@ -26,7 +26,7 @@ package sdk
 import (
 	"fmt"
 
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
 )
 
 // Spec is one node in a Parallel fan-out, created by the package-level Worker or

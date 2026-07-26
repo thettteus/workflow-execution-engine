@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tzpereira/workflow-execution-engine/core/contract"
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
-	"github.com/tzpereira/workflow-execution-engine/core/model"
-	"github.com/tzpereira/workflow-execution-engine/core/policy"
+	"github.com/thettteus/workflow-execution-engine/core/contract"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/model"
+	"github.com/thettteus/workflow-execution-engine/core/policy"
 )
 
 // TestCompiledContextIsDiffOnly is REQ-CTXPOL-01: a Worker configured with a

@@ -289,7 +289,7 @@ These resolve every "TBD" left in ROADMAP.md. Use them as-is.
 
 | Decision | Choice |
 |---|---|
-| Go module path | `github.com/tzpereira/workflow-execution-engine` (single module, matches `git remote`) |
+| Go module path | `github.com/thettteus/workflow-execution-engine` (single module, matches `git remote`) |
 | License | Apache-2.0 (patent grant; standard for dev-infra tooling) |
 | Binary name | `wee` |
 | JSON Schema validator (Go) | `github.com/santhosh-tekuri/jsonschema/v6` (draft 2020-12) — resolved 2026-07-14, was `/v5`; see §1a |
@@ -561,7 +561,7 @@ earlier `tidwall/gjson` item was resolved by hand-rolling too. No official vendo
 ### Tasks
 
 - [x] Create directories: `core/`, `cli/`, `sdk/`, `ui/`, `docs/`, `docs/adr/`, `examples/`, `schemas/`, `.github/workflows/`.
-- [x] `go mod init github.com/tzpereira/workflow-execution-engine` at repo root.
+- [x] `go mod init github.com/thettteus/workflow-execution-engine` at repo root.
 - [x] Add `.golangci.yml` at repo root enabling at least: `govet`, `staticcheck`, `errcheck`, `ineffassign`, `unused`.
 - [x] Add `LICENSE` file — Apache-2.0 text, copyright holder = repo owner.
 - [x] Add `docs/adr/0000-template.md` — minimal ADR template (Title / Status / Context / Decision / Consequences).

@@ -3,8 +3,8 @@ package cache_test
 import (
 	"testing"
 
-	"github.com/tzpereira/workflow-execution-engine/core/cache"
-	"github.com/tzpereira/workflow-execution-engine/core/domain"
+	"github.com/thettteus/workflow-execution-engine/core/cache"
+	"github.com/thettteus/workflow-execution-engine/core/domain"
 )
 
 func baseInputs() cache.Inputs {

@@ -12,7 +12,7 @@ import (
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 
-	"github.com/tzpereira/workflow-execution-engine/schemas"
+	"github.com/thettteus/workflow-execution-engine/schemas"
 )
 
 // Kind identifies which domain schema to validate against.
