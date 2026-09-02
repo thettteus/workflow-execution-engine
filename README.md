@@ -1,12 +1,13 @@
 # Workflow Execution Engine
 
+[![go](https://github.com/thettteus/workflow-execution-engine/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/thettteus/workflow-execution-engine/actions/workflows/go.yml) [![ui](https://github.com/thettteus/workflow-execution-engine/actions/workflows/ui.yml/badge.svg?branch=main)](https://github.com/thettteus/workflow-execution-engine/actions/workflows/ui.yml) [![vocabulary](https://github.com/thettteus/workflow-execution-engine/actions/workflows/vocabulary.yml/badge.svg?branch=main)](https://github.com/thettteus/workflow-execution-engine/actions/workflows/vocabulary.yml) [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 `wee` turns engineering processes into executable, auditable, versioned workflows.
 
 A lot of engineering knowledge still lives in documents, Slack threads, scripts, and people's heads. `wee` turns that knowledge into workflows with source code, versioning, execution history, replay, artifacts, observability, and metrics.
 
-**Workflows are software.**
-
-LLMs can execute parts of a workflow, but they do not control the system. `wee` is not an AI agent framework, chat product, or prompt builder.
+**Workflows are software.** LLMs can execute parts of a workflow, but they do not control the system. `wee`
+is not an AI agent framework, chat product, or prompt builder.
 
 ## Proof, not a mockup
 
@@ -23,6 +24,30 @@ Git Data API — not a mocked write:
 
 The full flagship proof — three real public-repo targets, two safe rejections, one successful fix, exact
 token/cost figures — is in [docs/CASE-STUDY.md](docs/CASE-STUDY.md).
+
+## Quickstart
+
+Build the CLI and run the first workflow. It needs no API key:
+
+```sh
+go build -o wee ./cli
+./wee cli
+```
+
+That executes a real, recorded, tool-only run in a temporary workspace and prints its artifact.
+
+From there, [docs/TUTORIAL.md](docs/TUTORIAL.md) is a copy-pasteable terminal walkthrough covering:
+
+```text
+run
+cli
+inspect
+replay
+cache
+backup
+export
+serve
+```
 
 ## Why
 
@@ -50,47 +75,7 @@ The runtime, not the model, decides how work executes.
 
 Everyone is programming their organization's processes, not prompting a model. See [docs/VISION.md](docs/VISION.md).
 
-## Status
-
-Phase 1 (MVP) is complete through the engine, CLI, SDK, and interface (M1.0–M1.15); the old M1.16/M1.17
-release gates are superseded by the Phase 2 local-first product-hardening plan.
-
-Phase 2 is in progress. The durable local control plane, safe mutation checkpoints, self-hosted packaging,
-connections, the visual/notifications shell, and a real flagship PR-review-and-fix run against a public
-repository are complete (M2.0–M2.6, M2.9–M2.13). The next sequential milestone is M2.7 (team self-hosting).
-See [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/EXECUTION-PHASE2.md](docs/EXECUTION-PHASE2.md) — its
-`## Status` section is the authoritative, current picture.
-
-There is no v1-stable API yet.
-
-Hosted/managed operation is intentionally later; the primary product should work when a user downloads `wee`
-and runs it in their own environment.
-
-## Quickstart
-
-Build the CLI and run the first workflow:
-
-```sh
-go build -o wee ./cli
-./wee cli
-```
-
-Then follow [docs/TUTORIAL.md](docs/TUTORIAL.md).
-
-The tutorial is a copy-pasteable terminal walkthrough covering:
-
-```text
-run
-cli
-inspect
-replay
-cache
-backup
-export
-serve
-```
-
-The first workflow does not require an API key.
+## Running it for real
 
 ### Self-hosted service
 
@@ -175,22 +160,50 @@ make ui      # frontend only
 
 See the `Makefile` for the full command list and configurable variables including `ADDR`, `UI_PORT`, `WORKSPACE`, and `DIR`.
 
+## Status
+
+Phase 1 (MVP) is complete through the engine, CLI, SDK, and interface (M1.0–M1.15); the old M1.16/M1.17
+release gates are superseded by the Phase 2 local-first product-hardening plan.
+
+Phase 2 is in progress. The durable local control plane, safe mutation checkpoints, self-hosted packaging,
+connections, the visual/notifications shell, and a real flagship PR-review-and-fix run against a public
+repository are complete (M2.0–M2.6, M2.9–M2.13). The next sequential milestone is M2.7 (team self-hosting).
+See [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/EXECUTION-PHASE2.md](docs/EXECUTION-PHASE2.md) — its
+`## Status` section is the authoritative, current picture.
+
+There is no v1-stable API yet.
+
+Hosted/managed operation is intentionally later; the primary product should work when a user downloads `wee`
+and runs it in their own environment.
+
 ## Documentation
 
-Start with [AGENTS.md](AGENTS.md), the index for the project's documentation:
+Start here, in order:
 
-- case study: [docs/CASE-STUDY.md](docs/CASE-STUDY.md) — the flagship demo's real run, in narrative form
-- constitution: binding rules and invariants
-- vision: why the project exists
-- specs: testable requirements
-- roadmap: milestones and sequencing
-- execution plan: implementation strategy for Phase 1
-- execution plan, Phase 2: [docs/EXECUTION-PHASE2.md](docs/EXECUTION-PHASE2.md)
-- self-hosted operation: [docs/self-hosted.md](docs/self-hosted.md)
-- ADRs: architectural decisions
-- glossary: shared terminology
+- [docs/quickstart.md](docs/quickstart.md) — the shortest path to a first run
+- [docs/TUTORIAL.md](docs/TUTORIAL.md) — a copy-pasteable terminal walkthrough
+- [docs/CASE-STUDY.md](docs/CASE-STUDY.md) — the flagship run against a public repo, in narrative form
+- [docs/writing-contracts.md](docs/writing-contracts.md) — authoring your own Workers and Contracts
+- [docs/self-hosted.md](docs/self-hosted.md) — running it as a service, with backup/restore and upgrades
 
-For a runnable terminal walkthrough, see [docs/TUTORIAL.md](docs/TUTORIAL.md).
+Reference:
+
+- [docs/cli-reference.md](docs/cli-reference.md) — every `wee` command and flag
+- [docs/sdk-reference.md](docs/sdk-reference.md) — the Go authoring SDK
+- [docs/glossary.md](docs/glossary.md) — shared terminology
+
+Design and rationale:
+
+- [docs/VISION.md](docs/VISION.md) — why the project exists, and what it deliberately is not
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — component map and execution lifecycle
+- [docs/spec/](docs/spec/) — testable requirements, one file per capability, with `REQ-*`/`NFR-*` IDs
+- [docs/adr/](docs/adr/) — architectural decisions and the reasoning behind them
+- [docs/threat-model.md](docs/threat-model.md) — trust boundaries and mitigations
+
+Working on the code — human or coding agent — starts at [AGENTS.md](AGENTS.md), the index that names the
+reading order, the binding rules in [docs/CONSTITUTION.md](docs/CONSTITUTION.md), and the current milestone
+in [docs/EXECUTION-PHASE2.md](docs/EXECUTION-PHASE2.md). Contributions: [CONTRIBUTING.md](CONTRIBUTING.md).
+Security reports: [SECURITY.md](SECURITY.md).
 
 ## License
 
