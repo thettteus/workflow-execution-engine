@@ -28,8 +28,10 @@ jobs:
       - name: Lint
         uses: golangci/golangci-lint-action@v6
         with:
-          # Pinned to the v1 line so it matches the v1-schema .golangci.yml.
-          version: v1.55.2
+          # Pinned to the last v1 release: it matches the v1-schema
+          # .golangci.yml, and unlike v1.55.2 (built with go1.22) its
+          # typechecker understands the go1.23 this module targets.
+          version: v1.64.8
 
       - name: Test (race)
         run: go test ./... -race
