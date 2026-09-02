@@ -62,8 +62,11 @@ prompt builder. If you're about to describe it that way, stop and read
 
 `Prompt`, `Agent` (as a domain concept), `Chat`, `Memory` must not appear in `schemas/`, `core/`, `cli/`,
 `sdk/`, or `docs/` outside the glossary's "instead-of" table. Use `Contract`, `Worker`, `Workspace`,
-`Execution`/`Artifacts`/`Context` instead. CI greps for this — see M1.0 acceptance criteria in
-EXECUTION.md.
+`Execution`/`Artifacts`/`Context` instead. Enforced in CI by `scripts/check-vocabulary.sh`
+(`.github/workflows/vocabulary.yml`, or `make vocab` locally). The gate exempts the files whose
+subject *is* the rule or the positioning against it, plus documented technical senses like
+`in-memory` and OpenAI's `chat/completions`; a one-off legitimate use is marked inline with
+`vocab-allow`. Originally specified as a manual grep in EXECUTION.md's M1.0 acceptance criteria.
 
 ## Non-goals — see CONSTITUTION.md for the full list
 

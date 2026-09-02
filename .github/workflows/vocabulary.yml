@@ -1,0 +1,19 @@
+name: vocabulary
+
+# PRIN-04's forbidden-vocabulary gate. Independent of go.yml and ui.yml —
+# no workflow blocks another. Needs no toolchain, so it runs in seconds.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  vocabulary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check forbidden vocabulary (PRIN-04)
+        run: ./scripts/check-vocabulary.sh

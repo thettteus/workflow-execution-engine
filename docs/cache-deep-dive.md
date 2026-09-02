@@ -30,7 +30,7 @@ them belong in what invalidates it.
 
 **Invalidation is total, not fuzzy.** Any change to any field — a Worker bumped a patch version, a Contract
 gained one more `required` field, an upstream artifact's content changed by one byte, a Worker's model
-config switched temperature — yields a wholly different key. There is no partial credit, no "the prompt is
+config switched temperature — yields a wholly different key. There is no partial credit, no "the inputs are
 basically the same" heuristic. This is a deliberate simplicity choice for Phase 1: a byte-for-byte
 invalidation rule is auditable and predictable; a fuzzy one would need its own explanation of when it
 does and doesn't fire.

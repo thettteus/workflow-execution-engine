@@ -47,7 +47,7 @@ the same `Scheduler`. Nothing about the graph is re-resolved live.
 
 **Not guaranteed — the one that matters most:**
 - **A re-executed node's output is not guaranteed to match its original bytes.** LLM-backed Workers are not
-  deterministic. Two calls with the identical prompt, contract, and model config can legitimately produce
+  deterministic. Two calls with the identical context, contract, and model config can legitimately produce
   different (even equally valid) output. Re-execution replays the *process*; it does not replay the
   *result*. A tool-backed node (M1.6a) is not cached at all in v1 (REQ-WORKER-07) — every re-execution
   reruns it, and whether *that* is byte-identical depends entirely on the tool (`git diff` against a

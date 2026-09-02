@@ -5,8 +5,9 @@ PRIN-08 · **Implementation:** `core/contract/` (M1.4)
 
 Workers execute Contracts. A Contract defines the goal, rules, constraints, success criteria, and the
 **required output schema** (JSON Schema, draft 2020-12). Contracts are **enforced, not suggested** — a
-contract without enforcement is just a prompt with a different name. Message construction from a Contract
-is internal plumbing (`core/contract/compiler.go`), never a user-facing concept (PRIN-04).
+contract without enforcement is just a prompt with a different name. <!-- vocab-allow: contrastive -->
+Message construction from a Contract is internal plumbing (`core/contract/compiler.go`), never a
+user-facing concept (PRIN-04).
 
 ### REQ-CONTRACT-01 — Output conforms before propagation
 When a Worker produces output, the engine shall parse it as JSON and validate it against the node's

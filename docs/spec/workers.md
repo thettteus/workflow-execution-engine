@@ -3,10 +3,11 @@
 **Prefix:** `REQ-WORKER` · **Status:** STABLE (delivery starts M1.4) · **Principles:** PRIN-03, PRIN-04,
 PRIN-05 · **Implementation:** `core/domain/worker.go`, `core/engine/node.go` (executor seam), M1.4 onward
 
-A Worker represents a **role** — reviewer, fixer, planner — not a persona and not an "agent". A Worker is
-fully described by data: objective, constraints, allowed tools, context policy, output contract, and model
-configuration. Workers are interchangeable: swapping the model or provider behind a Worker changes cost and
-quality, never the workflow's shape.
+A Worker represents a **role** — reviewer, fixer, planner — not a persona and
+not an "agent". <!-- vocab-allow: contrastive -->
+A Worker is fully described by data: objective, constraints, allowed tools, context policy, output
+contract, and model configuration. Workers are interchangeable: swapping the model or provider behind a
+Worker changes cost and quality, never the workflow's shape.
 
 ### REQ-WORKER-01 — Worker as declarative role
 The engine shall define a Worker entirely by its declared objective, constraints, tool allowlist, context

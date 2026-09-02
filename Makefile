@@ -10,10 +10,15 @@ WORKSPACE ?= .workflow
 DIR       ?= .
 TEMPLATES ?= examples/templates
 
-.PHONY: dev serve ui build ui-deps stop
+.PHONY: dev serve ui build ui-deps stop vocab
 
 build:
 	go build -o wee ./cli
+
+# PRIN-04 forbidden-vocabulary gate. CI runs the same script directly
+# (.github/workflows/vocabulary.yml); this is just the local shorthand.
+vocab:
+	@./scripts/check-vocabulary.sh
 
 ui-deps:
 	cd ui && pnpm install
