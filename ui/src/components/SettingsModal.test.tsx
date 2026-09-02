@@ -48,15 +48,18 @@ describe('SettingsModal', () => {
     fireEvent.change(input, { target: { value: 'sk-live-example' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    await waitFor(() =>
-      expect(setSecretSpy).toHaveBeenCalledWith(
-        'http://127.0.0.1:7676',
-        'OPENAI_API_KEY',
-        'sk-live-example',
-      ),
-    )
-    await waitFor(() => expect(input).toHaveValue(''))
+    // 'Saved.' is the settled signal: it is only set once setSecret has resolved
+    // and the success branch ran. Waiting on it first means everything after it
+    // is already true and needs no wall-clock budget of its own. Chaining three
+    // separate waits here made the test flaky under a loaded full-suite run,
+    // where 33 parallel jsdom files can starve a 1s budget.
     expect(await screen.findByText('Saved.')).toBeInTheDocument()
+    expect(setSecretSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:7676',
+      'OPENAI_API_KEY',
+      'sk-live-example',
+    )
+    expect(input).toHaveValue('')
   })
 
   it('accepts a raw GitHub token and saves the Authorization header value tools expect', async () => {
@@ -130,18 +133,16 @@ describe('SettingsModal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
 
-    await waitFor(() =>
-      expect(unsetSecretSpy).toHaveBeenCalledWith(
-        'http://127.0.0.1:7676',
-        'OPENAI_API_KEY',
-      ),
-    )
-    await waitFor(() =>
-      expect(
-        screen.getByRole('button', { name: 'Clear' }),
-      ).toBeDisabled(),
-    )
+    // Same settled-signal rule as the save case above. Waiting on the disabled
+    // state was additionally ambiguous: Clear is disabled mid-flight too (while
+    // `busy` is set), so that wait could pass on the in-progress state rather
+    // than the finished one.
     expect(await screen.findByText('Cleared.')).toBeInTheDocument()
+    expect(unsetSecretSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:7676',
+      'OPENAI_API_KEY',
+    )
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled()
   })
 
   it('shows a load error instead of a blank panel', async () => {
