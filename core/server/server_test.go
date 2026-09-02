@@ -326,7 +326,9 @@ func TestRunStartsExecutionAndReturnsID(t *testing.T) {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	var out runResponse
-	json.NewDecoder(resp.Body).Decode(&out)
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
 	if out.ExecutionID != "hello-exec1" {
 		t.Fatalf("executionId = %q, want hello-exec1", out.ExecutionID)
 	}

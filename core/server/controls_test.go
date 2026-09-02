@@ -378,7 +378,9 @@ func TestSettingsRoundTripSurvivesRestart(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	var got map[string]any
-	json.NewDecoder(resp.Body).Decode(&got)
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
 	if got["cacheMode"] != "readonly" || got["defaultBudgetUsd"].(float64) != 3 {
 		t.Fatalf("settings not durable across restart: %+v", got)
 	}
