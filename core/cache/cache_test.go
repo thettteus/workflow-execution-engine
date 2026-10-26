@@ -50,6 +50,7 @@ func TestKeyChangesOnAnyFieldChange(t *testing.T) {
 		"model params":   func(i *cache.Inputs) { i.Model.Params = map[string]any{"temperature": 1} },
 		"tools":          func(i *cache.Inputs) { i.ToolVersions = []string{"git"} },
 		"context policy": func(i *cache.Inputs) { i.ContextPolicy = domain.ContextPolicy{Mode: domain.ContextParentOnly} },
+		"definition":     func(i *cache.Inputs) { i.DefinitionHash = "edited-in-place" },
 	}
 	for name, m := range mutate {
 		in := baseInputs()

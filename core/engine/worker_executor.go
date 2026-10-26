@@ -129,6 +129,15 @@ func (e *WorkerExecutor) CacheKey(node domain.Node, inputs []NodeInput, workflow
 	if err != nil {
 		return "", false
 	}
+	// The whole definition, minus Description (documentation only, never sent
+	// to the model), so an in-place edit of objective or constraints at an
+	// unchanged version still invalidates the key.
+	def := w
+	def.Description = ""
+	definitionHash, err := canonical.Hash(def)
+	if err != nil {
+		return "", false
+	}
 	hashes := make([]string, 0, len(inputs))
 	for _, in := range inputs {
 		hashes = append(hashes, in.Hash)
@@ -146,6 +155,7 @@ func (e *WorkerExecutor) CacheKey(node domain.Node, inputs []NodeInput, workflow
 		Model:               w.Model,
 		ToolVersions:        w.Tools,
 		ContextPolicy:       pol,
+		DefinitionHash:      definitionHash,
 	}), true
 }
 

@@ -19,8 +19,16 @@ type Inputs struct {
     Model               domain.ModelConfig
     ToolVersions        []string
     ContextPolicy       domain.ContextPolicy
+    WorkflowInputs      map[string]string
+    DefinitionHash      string
 }
 ```
+
+`DefinitionHash` is the canonical hash of the Worker definition's model-visible fields (everything except
+`description`). `WorkerVersion` was meant to stand in for them, but version immutability is enforced per
+registry, which means per process. A `*.worker.yaml` edited in place without a version bump reached the
+next run as different content under the same `id@version`, and was served the old output from cache. Adding
+the field invalidated existing cache entries once.
 
 The key is the SHA-256 of the canonical JSON (ADR 0004) of exactly these fields (REQ-CACHE-01) — nothing
 else, nothing less. `InputArtifactHashes` and `ToolVersions` are sorted before hashing, so edge-declaration

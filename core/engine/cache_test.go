@@ -276,3 +276,36 @@ func TestCacheHitWithMissingArtifactEmitsDiagnosticMiss(t *testing.T) {
 	}
 	t.Fatalf("second run did not explain missing cache artifact: %#v", events)
 }
+
+// TestInPlaceWorkerEditInvalidatesCache: version immutability is enforced per
+// registry, i.e. per process, so a *.worker.yaml whose objective was edited
+// without a version bump reaches the next run as a different definition at the
+// same "id@version". The cache key covers the definition itself, so that run
+// is a miss — never the old objective's output served from cache.
+func TestInPlaceWorkerEditInvalidatesCache(t *testing.T) {
+	base := t.TempDir()
+	prov := &echoProvider{}
+	reg := model.NewRegistry()
+	reg.Register("openai", prov)
+	wf := &domain.Workflow{ID: "edit", Version: "1.0.0", Nodes: []domain.Node{{ID: "review", Worker: "reviewer@1.0.0"}}}
+
+	run := func(execID, objective string) {
+		t.Helper()
+		w := permissiveWorker("reviewer")
+		w.Objective = objective
+		ex := engine.NewWorkerExecutor(engine.MapWorkerSource{"reviewer@1.0.0": w}, reg)
+		s := engine.New(ex, store.New(base), eventlog.New(base), cache.New(base))
+		if _, err := s.Run(context.Background(), wf, engine.RunOptions{ExecutionID: execID}); err != nil {
+			t.Fatalf("%s: %v", execID, err)
+		}
+	}
+	run("before", "review for style")
+	run("after", "review for security")
+
+	if hits := countByType(t, eventlog.New(base), "after", domain.CacheHit); hits["review"] != 0 {
+		t.Fatalf("edited objective at the same version was served from cache: hits=%v", hits)
+	}
+	if prov.count() != 2 {
+		t.Fatalf("model calls = %d, want 2 (the edit must re-execute)", prov.count())
+	}
+}
