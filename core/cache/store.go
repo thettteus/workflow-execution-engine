@@ -33,17 +33,25 @@ type Entry struct {
 // artifact bytes themselves live in <baseDir>/artifacts (core/store); the index
 // holds only references, so nothing is stored twice. Safe for concurrent use.
 type Cache struct {
-	dir    string
-	mu     sync.Mutex
-	loaded bool
-	index  map[string]Entry
+	dir   string
+	mu    *sync.Mutex // shared by every Cache on the same dir (dirLocks)
+	index map[string]Entry
 }
 
-// New returns a cache rooted at <baseDir>/cache. The index is loaded lazily on
-// first access. baseDir is the workspace root — the same one core/store and
-// core/eventlog use — so cache hits reference artifacts the store already holds.
+// dirLocks serializes index read-modify-write cycles across every Cache
+// instance on one directory in this process (cache dir -> *sync.Mutex). Each
+// run's assembly and the server hold separate instances; with per-instance
+// locks and a once-loaded index, one instance's save silently dropped another's
+// entries, and an in-flight run could resurrect entries a "clear" had removed.
+var dirLocks sync.Map
+
+// New returns a cache rooted at <baseDir>/cache. baseDir is the workspace root
+// — the same one core/store and core/eventlog use — so cache hits reference
+// artifacts the store already holds.
 func New(baseDir string) *Cache {
-	return &Cache{dir: filepath.Join(baseDir, "cache"), index: make(map[string]Entry)}
+	dir := filepath.Join(baseDir, "cache")
+	mu, _ := dirLocks.LoadOrStore(dir, &sync.Mutex{})
+	return &Cache{dir: dir, mu: mu.(*sync.Mutex), index: make(map[string]Entry)}
 }
 
 // Get returns the entry for key, if present.
@@ -68,24 +76,23 @@ func (c *Cache) Put(e Entry) error {
 	return c.save()
 }
 
-// ensureLoaded reads the index from disk once. A missing index is an empty
-// cache, not an error. Callers hold c.mu.
+// ensureLoaded (re)reads the index from disk on every call, so each operation
+// sees what other instances wrote — never a copy loaded earlier. A missing
+// index is an empty cache, not an error. Callers hold c.mu.
 func (c *Cache) ensureLoaded() error {
-	if c.loaded {
-		return nil
-	}
 	data, err := os.ReadFile(filepath.Join(c.dir, indexFile))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			c.loaded = true
+			c.index = make(map[string]Entry)
 			return nil
 		}
 		return fmt.Errorf("cache: read index: %w", err)
 	}
-	if err := json.Unmarshal(data, &c.index); err != nil {
+	idx := make(map[string]Entry)
+	if err := json.Unmarshal(data, &idx); err != nil {
 		return fmt.Errorf("cache: decode index: %w", err)
 	}
-	c.loaded = true
+	c.index = idx
 	return nil
 }
 

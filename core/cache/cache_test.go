@@ -100,3 +100,50 @@ func TestListAndClear(t *testing.T) {
 		t.Errorf("Clear should empty the index, got %d entries", len(list))
 	}
 }
+
+// TestInstancesNeverLoseEachOthersEntries: each run's assembly and the server
+// hold separate Cache instances on one workspace. A write through one must not
+// drop entries another wrote after the first loaded its index.
+func TestInstancesNeverLoseEachOthersEntries(t *testing.T) {
+	base := t.TempDir()
+	runA, runB := cache.New(base), cache.New(base)
+	_, _ = runA.Get("warm")
+	_, _ = runB.Get("warm")
+	if err := runB.Put(cache.Entry{Key: "from-b"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := runA.Put(cache.Entry{Key: "from-a"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"from-a", "from-b"} {
+		if _, ok := cache.New(base).Get(k); !ok {
+			t.Errorf("entry %q lost by a concurrent instance's write", k)
+		}
+	}
+}
+
+// TestClearIsNotUndoneByAnotherInstance: a "clear cache" from the control plane
+// stays cleared even if an in-flight run, which loaded the index earlier, then
+// records a new entry.
+func TestClearIsNotUndoneByAnotherInstance(t *testing.T) {
+	base := t.TempDir()
+	if err := cache.New(base).Put(cache.Entry{Key: "stale"}); err != nil {
+		t.Fatal(err)
+	}
+	inflight := cache.New(base)
+	if _, ok := inflight.Get("stale"); !ok {
+		t.Fatal("fixture: in-flight instance should see the entry before the clear")
+	}
+	if err := cache.New(base).Clear(); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := inflight.Get("stale"); ok {
+		t.Error("an instance kept serving an entry after it was cleared")
+	}
+	if err := inflight.Put(cache.Entry{Key: "new"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := cache.New(base).Get("stale"); ok {
+		t.Error("a cleared entry was resurrected by an in-flight instance's write")
+	}
+}
