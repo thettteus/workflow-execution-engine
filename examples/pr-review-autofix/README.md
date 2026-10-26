@@ -210,10 +210,21 @@ later explicit `gzip;q=0`, even though the explicit exclusion must take preceden
 bounded HTTP-negotiation defect with a fast `go test ./...` validation path.
 
 Execution `pr-review-autofix-20260723T154012-3b8c09` completed its review and Fixer stages, but
-`verify-fix` rejected the proposed file before any approval checkpoint: although the content was file-shaped,
-it omitted the original copyright header and therefore diverged outside the targeted edit. The clone again
-remained clean. This is the intended fail-closed result and is retained as safety evidence, not used as the
-successful flagship run.
+`verify-fix` rejected the proposed file before any approval checkpoint. What the record shows (corrected
+2026-10-25; an earlier version of this section attributed the rejection to a dropped copyright header,
+which the recorded artifacts do not support — `middleware/compress.go` has no such header):
+
+- `locate-file` emitted an `originalUrl` pinned to the PR's head commit (`6764384b…`) instead of its base
+  commit (`8b258c7…`), violating its own constraint;
+- `read-original` therefore fetched the already-patched file, and the Fixer returned it byte-for-byte
+  unchanged;
+- `verify-fix` rejected it with the reason "content is a diff fragment, not a full file", which is false.
+
+The clone again remained clean. The outcome was the intended fail-closed one, reached for the wrong stated
+reason: only the verifier's boolean gates the graph, and its `reason` is not a reliable explanation. It is
+retained as safety evidence, not used as the successful flagship run. Since `pr-review-autofix@1.2.1`,
+`locate-file`'s contract requires `originalUrl` to pin a full 40-hex commit sha and `push-plan`'s requires
+well-formed SHAs and GitHub API URLs; a schema still cannot tell a base sha from a head sha.
 
 ### Third candidate and no-op correction
 
