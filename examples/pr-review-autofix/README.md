@@ -258,6 +258,15 @@ the requested handoff was to leave the completed execution in the UI for the own
 branch or open a competing PR against the existing public contribution. The persisted execution provides
 the video/still source; a public draft requires a separate owner decision.
 
+**Event-log integrity note (2026-10-25).** This execution's log does not pass hash-chain verification: it
+breaks at line 53, its second `ApprovalGranted`. `wee serve` recorded approval decisions through a different
+event-log instance than the one the resumed run appended through, and each instance cached its own chain
+head, so the second decision chained from the first instead of from the run's latest event. Every execution
+with two or more approval decisions recorded before the fix is affected the same way. The fix makes the head
+cache size-checked and serializes appends per file across instances, and `wee replay` now verifies the chain
+and reports `integrity: FAILED` for this run. The recorded log is deliberately left as it is: rewriting it to
+verify would itself be the tampering the chain exists to expose.
+
 ## Real-repo validation (M1.15)
 
 Run for real against three public repos of different sizes — [google/uuid](https://github.com/google/uuid)

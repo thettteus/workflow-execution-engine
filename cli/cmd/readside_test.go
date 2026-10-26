@@ -35,6 +35,35 @@ func TestReplayAuditReadsRecordedRun(t *testing.T) {
 	if !strings.Contains(out, "echo") || !strings.Contains(out, "succeeded") {
 		t.Errorf("expected the echo node to show succeeded:\n%s", out)
 	}
+	if !strings.Contains(out, "integrity: hash chain verified") {
+		t.Errorf("replay audit should report the verified hash chain:\n%s", out)
+	}
+}
+
+// TestReplayAuditFailsOnTamperedLog: the audit verifies the hash chain, so an
+// edited event line is reported and fails the command (exit 3) instead of
+// rendering a clean-looking timeline.
+func TestReplayAuditFailsOnTamperedLog(t *testing.T) {
+	id := runToolAndID(t)
+	path := filepath.Join(workspaceDir, "executions", id, "events.jsonl")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	tampered := strings.Replace(string(data), `"WorkerStarted"`, `"WorkerStarted","note":"edited"`, 1)
+	if tampered == string(data) {
+		t.Fatal("fixture has no WorkerStarted event to tamper with")
+	}
+	if err := os.WriteFile(path, []byte(tampered), 0o644); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	out, err := execCLI(t, "replay", id)
+	if err == nil {
+		t.Fatalf("replay of a tampered log should fail:\n%s", out)
+	}
+	if !strings.Contains(out, "integrity: FAILED") {
+		t.Errorf("replay output should name the integrity failure:\n%s", out)
+	}
 }
 
 func TestInspectNodeShowsArtifact(t *testing.T) {
