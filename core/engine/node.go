@@ -147,6 +147,11 @@ func (s *Scheduler) executeNode(
 	// on this goroutine's stack — the executor never holds cross-attempt state.
 	var res NodeResult
 	var feedback string
+	// failedCost/failedTokens accumulate what rejected attempts already spent
+	// (WithSpend). They are added to the node's total on success and reported
+	// on a terminal failure, so retries are never free in the books.
+	var failedCost float64
+	var failedTokens int64
 	err := withRetry(ctx, maxRetries, backoff, func() error {
 		var r NodeResult
 		var e error
@@ -171,37 +176,56 @@ func (s *Scheduler) executeNode(
 			res = r
 			return nil
 		}
+		c, t := spendOf(e)
+		failedCost += c
+		failedTokens += t
 		var cve contractViolationError
 		if errors.As(e, &cve) {
 			feedback = cve.Feedback
 		}
 		return e
 	}, func(attempt int, err error) {
-		s.emit(execID, domain.Retry, logicalID, map[string]any{
+		payload := map[string]any{
 			"attempt":    attempt,
 			"reason":     err.Error(),
 			"diagnostic": diagnostic.Payload(err, logicalID),
-		})
+		}
+		// Informational per-attempt spend; totals live on WorkerFinished/Failure.
+		if c, t := spendOf(err); c != 0 || t != 0 {
+			payload["attemptCostUsd"], payload["attemptTokens"] = c, t
+		}
+		s.emit(execID, domain.Retry, logicalID, payload)
 	})
+	spent := NodeResult{CostUSD: failedCost, Tokens: failedTokens}
 	if err != nil {
 		if errors.Is(err, ErrApprovalRequired) {
-			return NodeResult{}, err
+			return spent, err
 		}
 		// A terminal contract violation gets its own explicit event before the
 		// generic Failure (REQ-CONTRACT-03) — never a silent pass-through.
 		if isContractViolation(err) {
 			s.emit(execID, domain.ContractViolation, logicalID, map[string]any{"error": err.Error(), "diagnostic": diagnostic.Payload(err, logicalID)})
 		}
-		s.emit(execID, domain.Failure, logicalID, map[string]any{"error": err.Error(), "diagnostic": diagnostic.Payload(err, logicalID)})
-		return NodeResult{}, err
+		failure := map[string]any{"error": err.Error(), "diagnostic": diagnostic.Payload(err, logicalID)}
+		if failedCost != 0 || failedTokens != 0 {
+			failure["costUsd"], failure["tokens"] = failedCost, failedTokens
+		}
+		s.emit(execID, domain.Failure, logicalID, failure)
+		return spent, err
 	}
+	res.CostUSD += failedCost
+	res.Tokens += failedTokens
 
 	hash, err := s.store.Put(res.Content)
 	if err != nil {
 		wrapped := fmt.Errorf("store node %q artifact: %w", logicalID, err)
 		wrapped = diagnostic.Wrap(wrapped, diagnostic.KindArtifact, "artifact_store_failed", logicalID, "artifact.put", "artifact could not be persisted", "reduce output size or check workspace storage permissions")
-		s.emit(execID, domain.Failure, logicalID, map[string]any{"error": wrapped.Error(), "diagnostic": diagnostic.Payload(wrapped, logicalID)})
-		return NodeResult{}, wrapped
+		failure := map[string]any{"error": wrapped.Error(), "diagnostic": diagnostic.Payload(wrapped, logicalID)}
+		if res.CostUSD != 0 || res.Tokens != 0 {
+			failure["costUsd"], failure["tokens"] = res.CostUSD, res.Tokens
+		}
+		s.emit(execID, domain.Failure, logicalID, failure)
+		return NodeResult{CostUSD: res.CostUSD, Tokens: res.Tokens}, wrapped
 	}
 	res.Hash = hash
 

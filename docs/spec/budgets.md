@@ -23,6 +23,15 @@ once for that dimension.
 
 ### REQ-BUDGET-03 — Accurate per-call accounting
 When a model call completes, the engine shall record input/output tokens and compute cost from the
-provider's published rates, aggregated per node and rolled up per execution (feeding REQ-METRIC-01).
+provider's published rates, aggregated per node and rolled up per execution (feeding REQ-METRIC-01). This
+holds whether or not the call's output clears its contract: a rejected attempt was still billed.
+- **Implementation note:** a rejected attempt's spend travels with its error (`engine.WithSpend`).
+  - A node that later succeeds reports the total of all its attempts on `WorkerFinished`.
+  - A node that fails reports the spend of its rejected attempts on `Failure` (`costUsd`/`tokens`).
+  - `Retry` carries each attempt's `attemptCostUsd`/`attemptTokens`, for information only.
+
+  Before 2026-10-25, only the final, successful attempt was counted. A call cut off by cancellation or a
+  transport error returns no usage, so it still cannot be priced.
 - **Delivered by:** M1.4 (`core/cost/accounting.go`). **Verified by:** `cost` package tests; real per-call
-  cost surfaced through `NodeResult.CostUSD` (`engine.TestNoMalformedOutputCrossesBoundary` asserts it is priced).
+  cost surfaced through `NodeResult.CostUSD` (`engine.TestNoMalformedOutputCrossesBoundary` asserts it is
+  priced); `engine.TestRejectedAttemptSpendIsCounted`, `engine.TestFailedNodeSpendIsCounted`.

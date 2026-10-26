@@ -907,7 +907,9 @@ func summarize(id string, events []domain.Event) ExecutionSummary {
 				sum.State = st
 			}
 			finishedAt = ev.Timestamp
-		case domain.WorkerFinished:
+		case domain.WorkerFinished, domain.Failure:
+			// A Failure carries the spend of attempts that were billed but
+			// rejected (REQ-BUDGET-03); a WorkerFinished, the node's total.
 			if c, ok := ev.Payload["costUsd"].(float64); ok {
 				sum.SpentCostUSD += c
 			}

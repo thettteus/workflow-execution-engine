@@ -1158,3 +1158,15 @@ func TestIsLoopbackHostAndAddr(t *testing.T) {
 		}
 	}
 }
+
+// TestSummarizeCountsFailureSpend: an execution's spend includes the billed
+// attempts a Failure reports (REQ-BUDGET-03), not only WorkerFinished totals.
+func TestSummarizeCountsFailureSpend(t *testing.T) {
+	sum := summarize("x", []domain.Event{
+		{Type: domain.WorkerFinished, NodeID: "a", Payload: map[string]any{"costUsd": 0.01, "tokens": float64(5)}},
+		{Type: domain.Failure, NodeID: "b", Payload: map[string]any{"error": "contract violation", "costUsd": 0.03, "tokens": float64(30)}},
+	})
+	if sum.SpentTokens != 35 || sum.SpentCostUSD < 0.0399 || sum.SpentCostUSD > 0.0401 {
+		t.Errorf("summary spend = $%v / %d tok, want $0.04 / 35 tok", sum.SpentCostUSD, sum.SpentTokens)
+	}
+}

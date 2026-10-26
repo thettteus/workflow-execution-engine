@@ -188,7 +188,22 @@ export function reduce(prev: LiveState, ev: WFEvent): LiveState {
       return next
 
     case 'Failure':
-      if (ev.nodeId) patchNode(ev.nodeId, { status: 'failed', endedAt: at, error: str(p.error) })
+      if (ev.nodeId) {
+        // Attempts the contract rejected were still billed; the engine reports
+        // that spend on Failure (REQ-BUDGET-03). Absent on older logs → 0.
+        const cur = next.nodes[ev.nodeId] ?? freshNode(ev.nodeId)
+        const cost = num(p.costUsd)
+        const tokens = num(p.tokens)
+        patchNode(ev.nodeId, {
+          status: 'failed',
+          endedAt: at,
+          error: str(p.error),
+          costUsd: cur.costUsd + cost,
+          tokens: cur.tokens + tokens,
+        })
+        next.totalCostUsd += cost
+        next.totalTokens += tokens
+      }
       return next
 
     case 'ApprovalRequested':
