@@ -11,7 +11,7 @@
 # comes back from each POST's own response, parsed deterministically via the
 # HTTP tool's bodyJson output field (REQ-TOOL-07), never retyped by a model.
 id: push-plan
-version: 1.0.0
+version: 1.0.1
 description: Composes the branch name, GitHub Git Data API URLs, and PR title/body the push tail needs.
 objective: Read the reviewed PR's metadata and the accepted correction, then report the exact repo coordinates, a new branch name, every Git Data API URL the push tail will call, and a PR title/body.
 constraints:
@@ -42,36 +42,46 @@ contract:
     additionalProperties: false
     required: [baseSha, baseRef, branchName, refName, blobsUrl, treesUrl, commitsUrl, refsUrl, pullsUrl, baseCommitUrl, prTitle, prBody]
     properties:
+      # Shape checks (v1.0.1): a model transcribes these, and a schema that only
+      # says "string" let a wrong SHA or a non-GitHub URL reach an authenticated
+      # POST. Patterns can't prove it's the RIGHT repo/sha — the approval
+      # checkpoint shows that — but malformed values now fail the contract.
       baseSha:
         type: string
-        maxLength: 100
+        pattern: "^[0-9a-f]{40}$"
       baseRef:
         type: string
         maxLength: 200
       branchName:
         type: string
-        maxLength: 200
+        pattern: "^wee-autofix-[0-9]+$"
       refName:
         type: string
-        maxLength: 220
+        pattern: "^refs/heads/wee-autofix-[0-9]+$"
       blobsUrl:
         type: string
         maxLength: 500
+        pattern: "^https://api\\.github\\.com/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/git/blobs$"
       treesUrl:
         type: string
         maxLength: 500
+        pattern: "^https://api\\.github\\.com/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/git/trees$"
       commitsUrl:
         type: string
         maxLength: 500
+        pattern: "^https://api\\.github\\.com/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/git/commits$"
       refsUrl:
         type: string
         maxLength: 500
+        pattern: "^https://api\\.github\\.com/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/git/refs$"
       pullsUrl:
         type: string
         maxLength: 500
+        pattern: "^https://api\\.github\\.com/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pulls$"
       baseCommitUrl:
         type: string
         maxLength: 600
+        pattern: "^https://api\\.github\\.com/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/git/commits/[0-9a-f]{40}$"
       prTitle:
         type: string
         maxLength: 100

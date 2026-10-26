@@ -3,7 +3,7 @@
 # keeps public-PR review/fix proposal remote-first; a local checkout is only
 # needed later if the workflow actually applies/tests/commits a fix.
 id: locate-file
-version: 1.0.1
+version: 1.0.2
 description: Resolves the changed file and its immutable base-version source URL.
 objective: Read GitHub PR metadata plus a unified diff, then report the exact changed path and the raw URL for that file at the PR base commit.
 constraints:
@@ -32,9 +32,14 @@ contract:
       path:
         type: string
         maxLength: 500
+      # v1.0.2: the URL must pin a full 40-hex commit sha. This can't tell base
+      # from head (run 3b8c09 used head.sha against this Worker's own
+      # constraint; only the approval and the verifier stand behind that), but
+      # it rejects branch names, short shas, and non-raw hosts outright.
       originalUrl:
         type: string
         maxLength: 1000
+        pattern: "^https://raw\\.githubusercontent\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/[0-9a-f]{40}/.+$"
 model:
   provider: openai
   model: gpt-4o-mini

@@ -105,7 +105,7 @@
 # (test command, timeouts, budget) is expected — see M1.15's validation notes
 # once run against real repositories.
 id: pr-review-autofix
-version: 1.2.0
+version: 1.2.1
 inputs:
   - name: prUrl
     required: true
@@ -139,7 +139,7 @@ nodes:
     worker: security-reviewer@1.0.1
 
   - id: locate-file
-    worker: locate-file@1.0.1
+    worker: locate-file@1.0.2
 
   - id: read-original
     tool:
@@ -157,7 +157,7 @@ nodes:
     worker: verify-fix@1.1.1
 
   - id: push-plan
-    worker: push-plan@1.0.0
+    worker: push-plan@1.0.1
 
   - id: checkout-branch
     tool:
