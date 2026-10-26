@@ -125,3 +125,52 @@ func TestVerifyDetectsGenesisBreak(t *testing.T) {
 		t.Errorf("genesis break named at line %d, want 1", ce.Line)
 	}
 }
+
+// TestVerifyCleanAcrossLogInstances is the regression for a chain fork that
+// broke every approval-gated run: `wee serve` records approval decisions through
+// its own Log while each run/resume appends through another, and a per-instance
+// head cache made the second decision chain from the first one instead of the
+// run's latest event. Interleaved appends from two instances must still verify.
+func TestVerifyCleanAcrossLogInstances(t *testing.T) {
+	const execID = "exec-two-writers"
+	base := writeChain(t, execID)
+	server, run := eventlog.New(base), eventlog.New(base)
+	ts := time.Date(2026, 7, 16, 13, 0, 0, 0, time.UTC)
+	for i, w := range []*eventlog.Log{server, run, run, server, run, server, server, run} {
+		ev := domain.Event{Type: domain.WorkerStarted, Timestamp: ts.Add(time.Duration(i) * time.Second), ExecutionID: execID}
+		if err := w.Append(execID, ev); err != nil {
+			t.Fatalf("Append %d: %v", i, err)
+		}
+	}
+	if err := eventlog.New(base).Verify(execID); err != nil {
+		t.Fatalf("interleaved instances forked the chain: %v", err)
+	}
+}
+
+// TestVerifyCleanUnderConcurrentInstances: concurrent appends from separate Log
+// instances in one process are serialized per events file, never forking.
+func TestVerifyCleanUnderConcurrentInstances(t *testing.T) {
+	const execID = "exec-concurrent"
+	base := writeChain(t, execID)
+	done := make(chan error)
+	for w := 0; w < 4; w++ {
+		go func() {
+			l := eventlog.New(base)
+			for i := 0; i < 25; i++ {
+				if err := l.Append(execID, domain.Event{Type: domain.WorkerStarted, ExecutionID: execID}); err != nil {
+					done <- err
+					return
+				}
+			}
+			done <- nil
+		}()
+	}
+	for w := 0; w < 4; w++ {
+		if err := <-done; err != nil {
+			t.Fatalf("Append: %v", err)
+		}
+	}
+	if err := eventlog.New(base).Verify(execID); err != nil {
+		t.Fatalf("concurrent instances forked the chain: %v", err)
+	}
+}
