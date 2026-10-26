@@ -462,6 +462,7 @@ func TestCORSPreflight(t *testing.T) {
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 	req, _ := http.NewRequest(http.MethodOptions, ts.URL+"/api/settings", nil)
+	req.Header.Set("Origin", "http://localhost:5173")
 	req.Header.Set("Access-Control-Request-Method", http.MethodPut)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -471,8 +472,8 @@ func TestCORSPreflight(t *testing.T) {
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("preflight status = %d", resp.StatusCode)
 	}
-	if resp.Header.Get("Access-Control-Allow-Origin") != "*" {
-		t.Error("missing CORS allow-origin")
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "http://localhost:5173" {
+		t.Errorf("allow-origin = %q, want the echoed loopback UI origin", got)
 	}
 	methods := resp.Header.Get("Access-Control-Allow-Methods")
 	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions} {
@@ -983,7 +984,7 @@ func TestSetSecretAppliesToProcessEnvironmentImmediately(t *testing.T) {
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
-	const name = "WEE_TEST_SECRET_SET"
+	const name = "WEE_TEST_SET_SECRET"
 	os.Unsetenv(name)
 	t.Cleanup(func() { os.Unsetenv(name) })
 
@@ -1022,7 +1023,7 @@ func TestUnsetSecretClearsIt(t *testing.T) {
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
 
-	const name = "WEE_TEST_SECRET_UNSET_ME"
+	const name = "WEE_TEST_UNSET_ME_SECRET"
 	os.Setenv(name, "will be cleared")
 	t.Cleanup(func() { os.Unsetenv(name) })
 
@@ -1037,5 +1038,123 @@ func TestUnsetSecretClearsIt(t *testing.T) {
 	}
 	if _, ok := os.LookupEnv(name); ok {
 		t.Error("env var still set after DELETE /api/secrets")
+	}
+}
+
+// TestCrossOriginRequestsRefused is the regression for the control plane's
+// former wildcard CORS: a page on any other origin could PUT settings (e.g. a
+// provider base URL pointing at itself, then POST /api/run to receive the API
+// key), set env vars, or approve mutations. A non-loopback Origin is refused
+// before any handler runs, and nothing it sent is applied.
+func TestCrossOriginRequestsRefused(t *testing.T) {
+	s, _ := fastServer(t, nil)
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	for _, origin := range []string{"https://evil.example", "null", "http://192.168.1.10:5173"} {
+		pre, _ := http.NewRequest(http.MethodOptions, ts.URL+"/api/settings", nil)
+		pre.Header.Set("Origin", origin)
+		pre.Header.Set("Access-Control-Request-Method", http.MethodPut)
+		resp, err := http.DefaultClient.Do(pre)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden || resp.Header.Get("Access-Control-Allow-Origin") != "" {
+			t.Errorf("preflight from %s: status %d, allow-origin %q; want 403 and no CORS grant", origin, resp.StatusCode, resp.Header.Get("Access-Control-Allow-Origin"))
+		}
+
+		put, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/settings", strings.NewReader(`{"providerBaseUrls":{"openai":"https://evil.example/v1"}}`))
+		put.Header.Set("Origin", origin)
+		put.Header.Set("Content-Type", "application/json")
+		resp, err = http.DefaultClient.Do(put)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("PUT /api/settings from %s: status %d, want 403", origin, resp.StatusCode)
+		}
+	}
+
+	resp, err := http.Get(ts.URL + "/api/settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if strings.Contains(string(body), "evil.example") {
+		t.Errorf("a refused cross-origin PUT was still applied: %s", body)
+	}
+}
+
+// TestSameOriginAndNoOriginAllowed: the --ui-dir build (same origin) and
+// non-browser clients (no Origin header) are unaffected by the origin policy.
+func TestSameOriginAndNoOriginAllowed(t *testing.T) {
+	s, _ := fastServer(t, nil)
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	for _, origin := range []string{ts.URL, ""} {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/settings", nil)
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("GET /api/settings with Origin %q: status %d, want 200", origin, resp.StatusCode)
+		}
+	}
+}
+
+// TestSetSecretRejectsNonCredentialNames: /api/secrets may only set names that
+// look like credentials, never process-control variables every tool subprocess
+// inherits.
+func TestSetSecretRejectsNonCredentialNames(t *testing.T) {
+	s, _ := fastServer(t, nil)
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	for _, name := range []string{"PATH", "GOFLAGS", "GIT_CONFIG_COUNT", "HTTPS_PROXY", "WEE_WORKSPACE_ROOT", "openai_api_key"} {
+		before, had := os.LookupEnv(name)
+		body, _ := json.Marshal(setSecretRequest{Name: name, Value: "x"})
+		resp, err := http.Post(ts.URL+"/api/secrets", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("POST /api/secrets name=%s: status %d, want 400", name, resp.StatusCode)
+		}
+		if after, has := os.LookupEnv(name); has != had || after != before {
+			t.Errorf("%s was modified by a rejected request", name)
+		}
+	}
+}
+
+func TestIsLoopbackHostAndAddr(t *testing.T) {
+	for host, want := range map[string]bool{"localhost": true, "127.0.0.1": true, "::1": true, "[::1]": true, "evil.example": false, "0.0.0.0": false, "192.168.1.10": false} {
+		if got := isLoopbackHost(host); got != want {
+			t.Errorf("isLoopbackHost(%q) = %v, want %v", host, got, want)
+		}
+	}
+	for addr, want := range map[string]bool{"127.0.0.1:7676": true, "localhost:7676": true, "0.0.0.0:7676": false, ":7676": false} {
+		if got := isLoopbackAddr(addr); got != want {
+			t.Errorf("isLoopbackAddr(%q) = %v, want %v", addr, got, want)
+		}
+	}
+	h := withLoopbackHost(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	for host, want := range map[string]int{"127.0.0.1:7676": http.StatusOK, "localhost:7676": http.StatusOK, "rebound.evil.example:7676": http.StatusMisdirectedRequest} {
+		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+		req.Host = host
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != want {
+			t.Errorf("Host %s: status %d, want %d", host, rec.Code, want)
+		}
 	}
 }

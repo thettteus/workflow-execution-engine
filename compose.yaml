@@ -3,7 +3,10 @@ services:
     build: .
     image: wee:local
     ports:
-      - "7676:7676"
+      # Loopback only: the API has no authentication yet (M2.7). Publishing it on
+      # every interface would hand settings, secrets, approvals and runs to
+      # anything on the network (docs/threat-model.md §6).
+      - "127.0.0.1:7676:7676"
     volumes:
       - wee-data:/data/.workflow
       - wee-workflows:/workflows
