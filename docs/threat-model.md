@@ -95,11 +95,48 @@ clean audit or a false savings report.
   event's raw bytes; `eventlog.Verify` walks the chain and names the first break, catching any edit,
   deletion, or reorder — including injected fields the struct would otherwise ignore. Verified by
   `TestVerifyDetectsTamper`, `TestVerifyDetectsGenesisBreak`.
+- `wee replay <id>` (the audit) runs `Verify` and fails with `integrity: FAILED` on a break, so an audit
+  is a check, not only a rendering. Verified by `TestReplayAuditFailsOnTamperedLog`.
+- Appends are serialized per events file across every `eventlog.Log` instance in the process, and a cached
+  chain head is trusted only while the file size still matches it. Before this (fixed 2026-10-25), `wee
+  serve` recorded approval decisions through one instance while resumed runs appended through another; each
+  cached its own head, so every execution with two or more approval decisions forked its own chain. Those
+  recorded logs fail verification and are deliberately left unmodified. Verified by
+  `TestVerifyCleanAcrossLogInstances`, `TestVerifyCleanUnderConcurrentInstances`.
 - Artifacts are content-addressed, so altering an artifact changes its hash and breaks the reference.
 - **Residual _(neutral, by design):** the chain proves *internal* consistency; a party who rewrites the
   whole chain from a break point onward defeats it. External anchoring (publishing head hashes) is a
-  possible Phase 2 hardening, not promised now.
-- **Ships:** M1.4 (chain retrofit).
+  possible Phase 2 hardening, not promised now. Appends from separate *processes* (a `wee run` and a `wee
+  serve` on one execution) are not locked against each other.
+- **Ships:** M1.4 (chain retrofit); audit verification and multi-instance appends fixed 2026-10-25.
+
+### 6. Local control plane (`wee serve`)
+
+A web page the operator visits while `wee serve` is running — or, for the Docker image, any host that can
+reach the published port — calls the HTTP API directly. The API has no authentication yet (planned for
+M2.7). Until 2026-10-25 it also answered every origin with `Access-Control-Allow-Origin: *`, so a page on any
+origin could rewrite a provider's base URL through `PUT /api/settings` and start a run with `POST /api/run`.
+The provider client then sent the API key to the page's server. The same path could approve mutation
+checkpoints, start runs with `allowMutationsWithoutApproval`, and set arbitrary environment variables
+(`GOFLAGS`, `GIT_*`, proxies) inherited by tool subprocesses.
+
+- **Origin policy:** a request carrying an `Origin` is served only from the server's own origin (the
+  `--ui-dir` build) or a loopback origin (the Vite dev server); every other origin gets `403` before any
+  handler runs. Allowed origins are echoed, never `*`. The WebSocket event stream admits the same origins.
+  Requests with no `Origin` (curl, the CLI) are unaffected. Verified by `TestCrossOriginRequestsRefused`,
+  `TestSameOriginAndNoOriginAllowed`.
+- **DNS rebinding:** when `wee serve` listens on a loopback address (the default, `127.0.0.1:7676`), a
+  request whose `Host` is not a loopback name is refused. Without this, a domain re-resolved to 127.0.0.1
+  would be same-origin with the server. Verified by `TestIsLoopbackHostAndAddr`.
+- **Secrets endpoint:** `POST`/`DELETE /api/secrets` accept only credential-shaped names (`UPPER_SNAKE`
+  ending in `_KEY`, `_TOKEN`, `_AUTH_HEADER`, `_SECRET`, `_PASSWORD`), never process-control variables.
+  Verified by `TestSetSecretRejectsNonCredentialNames`.
+- **Docker:** `compose.yaml` publishes the port on `127.0.0.1` only. The container itself must listen on
+  `0.0.0.0`, so the Host check does not apply inside it; publishing the port beyond loopback exposes an
+  unauthenticated API to that network.
+- **Residual _(Phase 2, M2.7)_:** no authentication. Any local process, and any client that can reach a
+  non-loopback listen address without a browser, has full control of the API.
+- **Ships:** origin policy, rebinding guard, secret-name bound, compose binding — 2026-10-25.
 
 ## Summary
 
@@ -109,6 +146,7 @@ clean audit or a false savings report.
 | Allowlist bypass | exact argv / parsed-host matching, deny-first | M1.5 | redirect re-checking, SSRF IP filtering |
 | Malicious definitions | schema validation, content-addressed storage, closed enums | M1.1–M1.5 | definition size/depth limits |
 | Secret exfiltration | secrets as references, no header logging, no secret tool | M1.4–M1.5 | broad-allowlist review (M2.7) |
-| Event-log poisoning | hash-chained log, content-addressed artifacts | M1.4 | external anchoring |
+| Event-log poisoning | hash-chained log, content-addressed artifacts, verified audit | M1.4 | external anchoring, cross-process append lock |
+| Local control plane | origin allowlist, loopback Host guard, credential-name bound, loopback-only compose port | 2026-10-25 | authentication (M2.7) |
 
 Phase 2 hardening and a red-team pass are tracked under NFR-SEC-03 (M2.7).

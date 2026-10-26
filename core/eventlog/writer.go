@@ -33,14 +33,34 @@ const genesisHash = ""
 // Log reads and writes execution records under <baseDir>/executions.
 type Log struct {
 	baseDir string
-	mu      sync.Mutex        // serializes appends so concurrent lines never interleave
-	lastCh  map[string]string // per-execution hash of the last-appended event (hash-chain head)
+	mu      sync.Mutex           // guards lastCh
+	lastCh  map[string]chainHead // per-execution hash-chain head, as last written by THIS instance
+}
+
+// chainHead is a cached hash-chain head plus the events-file size it was
+// computed at. The size is what makes the cache safe across Log instances: any
+// append by another instance (the server's approval writer vs. a run's own Log,
+// both in one process) grows the file, the sizes no longer match, and the head
+// is recomputed from disk instead of chaining from a stale predecessor.
+type chainHead struct {
+	hash string
+	size int64
+}
+
+// fileLocks serializes appends to one events file across every Log instance in
+// this process (events-file path -> *sync.Mutex). A per-instance mutex alone let
+// two instances interleave a head read and a write and fork the chain.
+var fileLocks sync.Map
+
+func fileLock(path string) *sync.Mutex {
+	m, _ := fileLocks.LoadOrStore(path, &sync.Mutex{})
+	return m.(*sync.Mutex)
 }
 
 // New returns a Log rooted at <baseDir>/executions. baseDir is the workspace
 // root (conventionally ".workflow").
 func New(baseDir string) *Log {
-	return &Log{baseDir: baseDir, lastCh: make(map[string]string)}
+	return &Log{baseDir: baseDir, lastCh: make(map[string]chainHead)}
 }
 
 // lineHash is the SHA-256 of an event's exact on-disk line bytes — the value a
@@ -67,12 +87,10 @@ func (l *Log) snapshotHash(executionID string) (string, error) {
 }
 
 // headHash returns the hash the next appended event must chain from: the cached
-// head if known, else recomputed from the log's last line on disk, else the
-// snapshot's hash (genesis) for an empty/absent log. Callers hold l.mu.
+// head if it was computed at the file's current size, else recomputed from the
+// log's last line on disk, else the snapshot's hash (genesis) for an
+// empty/absent log. Callers hold the events file's lock and l.mu.
 func (l *Log) headHash(executionID string) (string, error) {
-	if h, ok := l.lastCh[executionID]; ok {
-		return h, nil
-	}
 	path := filepath.Join(l.baseDir, "executions", executionID, eventsFile)
 	f, err := os.Open(path)
 	if err != nil {
@@ -82,6 +100,11 @@ func (l *Log) headHash(executionID string) (string, error) {
 		return "", fmt.Errorf("eventlog: open log for chain head: %w", err)
 	}
 	defer f.Close()
+	if h, ok := l.lastCh[executionID]; ok {
+		if st, err := f.Stat(); err == nil && st.Size() == h.size {
+			return h.hash, nil
+		}
+	}
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), maxLine)
@@ -115,10 +138,14 @@ func (l *Log) dir(executionID string) (string, error) {
 // Append writes ev as one JSON line to the execution's events.jsonl, chaining it
 // to its predecessor: ev.PrevHash is set to the hash of the last-written event
 // (or the snapshot's hash for the first event), making the log tamper-evident
-// (ADR 0007). Appends are serialized, so lines are never interleaved and the
-// chain stays strictly ordered under concurrent writers. PrevHash on the passed
-// event is ignored and overwritten.
+// (ADR 0007). Appends are serialized per events file across every Log instance
+// in the process, so lines are never interleaved and the chain stays strictly
+// ordered under concurrent writers. PrevHash on the passed event is ignored and
+// overwritten.
 func (l *Log) Append(executionID string, ev domain.Event) error {
+	fl := fileLock(filepath.Join(l.baseDir, "executions", executionID, eventsFile))
+	fl.Lock()
+	defer fl.Unlock()
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -146,6 +173,10 @@ func (l *Log) Append(executionID string, ev domain.Event) error {
 	if _, err := f.Write(append(line, '\n')); err != nil {
 		return fmt.Errorf("eventlog: append: %w", err)
 	}
-	l.lastCh[executionID] = lineHash(line)
+	if st, err := f.Stat(); err == nil {
+		l.lastCh[executionID] = chainHead{hash: lineHash(line), size: st.Size()}
+	} else {
+		delete(l.lastCh, executionID) // recompute from disk next time
+	}
 	return nil
 }

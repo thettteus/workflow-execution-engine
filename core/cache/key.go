@@ -31,6 +31,13 @@ type Inputs struct {
 	Model               domain.ModelConfig   `json:"model"`
 	ToolVersions        []string             `json:"toolVersions"`
 	ContextPolicy       domain.ContextPolicy `json:"contextPolicy"`
+	// DefinitionHash is the canonical hash of the Worker definition's
+	// model-visible fields (objective, constraints, ...). WorkerVersion alone
+	// stands in for them only while versions are immutable, and immutability is
+	// enforced per registry, i.e. per process: a *.worker.yaml edited in place
+	// without a version bump would otherwise be served its old output.
+	// omitempty keeps keys from callers that don't set it unchanged.
+	DefinitionHash string `json:"definitionHash,omitempty"`
 }
 
 // Key returns the deterministic cache key for a node: the SHA-256 of the

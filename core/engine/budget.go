@@ -86,3 +86,29 @@ func (b *budgetTracker) status() map[string]any {
 		"maxDurationMs": b.limit.MaxDurationMs,
 	}
 }
+
+// recordedSpend sums the cost and tokens an execution's log already records —
+// WorkerFinished totals plus the spend Failure events carry for nodes whose
+// attempts were billed but rejected — and whether a BudgetWarning already
+// fired, so a resumed segment continues the execution's budget instead of
+// starting a fresh one. An unreadable log contributes nothing.
+func (s *Scheduler) recordedSpend(execID string) (cost float64, tokens int64, warned bool) {
+	events, err := s.log.ReadAll(execID)
+	if err != nil {
+		return 0, 0, false
+	}
+	for _, ev := range events {
+		switch ev.Type {
+		case domain.WorkerFinished, domain.Failure:
+			if c, ok := ev.Payload["costUsd"].(float64); ok {
+				cost += c
+			}
+			if t, ok := ev.Payload["tokens"].(float64); ok {
+				tokens += int64(t)
+			}
+		case domain.BudgetWarning:
+			warned = true
+		}
+	}
+	return cost, tokens, warned
+}

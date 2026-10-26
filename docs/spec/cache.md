@@ -9,12 +9,17 @@ workflow after changing one node re-executes only downstream of the change.
 
 ### REQ-CACHE-01 — Deterministic cache key
 The engine shall derive a node's cache key from the canonical hashes of: Worker version, Contract version,
-resolved workflow inputs, resolved input artifacts, model + parameters, and tool versions — nothing else,
-nothing less.
+the Worker definition's model-visible content, resolved workflow inputs, resolved input artifacts, model +
+parameters, and tool versions — nothing else, nothing less.
 - **Rationale:** PRIN-01 — the key *is* the reproducibility statement; content addressing (ADR 0004) makes
   it byte-stable.
+- **Implementation note:** the definition-content hash (`cache.Inputs.DefinitionHash`, added 2026-10-25)
+  covers objective and constraints. The version alone stood in for them only while versions are immutable,
+  and immutability is enforced per registry (per process), so an in-place edit without a bump used to be
+  served stale output.
 - **Delivered by:** M1.6. **Verified by:** `cache.TestKeyDeterministicAndOrderInsensitive`,
-  `TestKeyChangesOnAnyFieldChange`, `engine.TestChangingWorkflowInputInvalidatesWorkerCache`.
+  `TestKeyChangesOnAnyFieldChange`, `engine.TestChangingWorkflowInputInvalidatesWorkerCache`,
+  `engine.TestInPlaceWorkerEditInvalidatesCache`.
 
 ### REQ-CACHE-02 — Hit returns the recorded artifact
 When a node's cache key matches a prior execution, the engine shall return the cached artifact

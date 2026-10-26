@@ -79,6 +79,24 @@ describe('live reduce', () => {
     expect(live.state).toBe('failed')
   })
 
+  it('counts the billed spend a Failure reports for rejected attempts', () => {
+    const live = reduceAll(
+      [
+        ev({ type: 'ExecutionStarted', payload: { workflow: 'wf', version: '1.0.0' } }),
+        ev({ type: 'WorkerStarted', nodeId: 'a' }),
+        ev({ type: 'WorkerFinished', nodeId: 'a', payload: { costUsd: 0.01, tokens: 5 } }),
+        ev({ type: 'WorkerStarted', nodeId: 'b' }),
+        ev({ type: 'Failure', nodeId: 'b', payload: { error: 'contract violation', costUsd: 0.03, tokens: 30 } }),
+        ev({ type: 'ExecutionFinished', payload: { state: 'failed' } }),
+      ],
+      ['a', 'b'],
+    )
+    expect(live.nodes.b.costUsd).toBeCloseTo(0.03)
+    expect(live.nodes.b.tokens).toBe(30)
+    expect(live.totalCostUsd).toBeCloseTo(0.04)
+    expect(live.totalTokens).toBe(35)
+  })
+
   it('counts retries', () => {
     const live = reduceAll(
       [

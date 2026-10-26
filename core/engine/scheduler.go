@@ -266,6 +266,15 @@ func (s *Scheduler) run(parent context.Context, wf *domain.Workflow, opts RunOpt
 	}
 
 	budget := newBudgetTracker(opts.Budget, s.now)
+	if !fresh {
+		// A resumed run (every approval is one) continues the same execution's
+		// budget: cost and tokens its earlier segments recorded still count.
+		// Duration deliberately restarts — time spent paused waiting on a human
+		// approval is not execution time.
+		cost, tokens, warned := s.recordedSpend(execID)
+		budget.add(cost, tokens)
+		budget.warned = warned
+	}
 	backoff := exponentialBackoff(opts.RetryBackoff, opts.RetryBackoffMax)
 	cacheMode := s.normalizeCacheMode(opts.Cache)
 	approvals := s.approvalRecords(execID)
@@ -390,17 +399,43 @@ func (s *Scheduler) run(parent context.Context, wf *domain.Workflow, opts RunOpt
 		}()
 	}
 
+	// checkBudget halts the run with BudgetExceeded once spend crosses a limit,
+	// or emits the one-time BudgetWarning as it approaches one.
+	checkBudget := func(id string) {
+		if budget.exceeded() {
+			payload := budget.status()
+			err := diagnostic.Wrap(ErrBudgetExceeded, diagnostic.KindBudget, "budget_exceeded", id, "budget.check", "execution exceeded its configured budget", "raise the budget or reduce workflow cost, tokens, or duration")
+			payload["diagnostic"] = diagnostic.Payload(err, id)
+			s.emit(execID, domain.BudgetExceeded, "", payload)
+			halt(err)
+		} else if budget.shouldWarn() {
+			s.emit(execID, domain.BudgetWarning, "", budget.status())
+		}
+	}
+
 	handleCompletion := func(c completion) {
 		inFlight--
 		if c.err != nil {
+			// A failed node can still have spent: model calls whose output its
+			// contract rejected (WithSpend). That spend counts toward the budget
+			// and the node's outcome exactly like a success's would.
+			budget.add(c.res.CostUSD, c.res.Tokens)
+			defer func() {
+				if !halted {
+					checkBudget(c.id)
+				}
+			}()
+			failed := func(st NodeState) NodeOutcome {
+				return NodeOutcome{State: st, Err: c.err.Error(), CostUSD: c.res.CostUSD, Tokens: c.res.Tokens}
+			}
 			if errors.Is(c.err, ErrApprovalRequired) {
-				outcomes[c.id] = NodeOutcome{State: StatePending, Err: c.err.Error()}
+				outcomes[c.id] = failed(StatePending)
 				state[c.id] = StatePending
 				halt(c.err)
 				return
 			}
 			if errors.Is(c.err, ErrApprovalRejected) {
-				outcomes[c.id] = NodeOutcome{State: StateFailed, Err: c.err.Error()}
+				outcomes[c.id] = failed(StateFailed)
 				settle(c.id, StateFailed)
 				halt(c.err)
 				return
@@ -410,7 +445,7 @@ func (s *Scheduler) run(parent context.Context, wf *domain.Workflow, opts RunOpt
 			// a consequence of the teardown, not a node failure — record it but
 			// don't override the real halt cause (cancellation / budget).
 			if halted || parent.Err() != nil || errors.Is(c.err, context.Canceled) || errors.Is(c.err, context.DeadlineExceeded) {
-				outcomes[c.id] = NodeOutcome{State: StateFailed, Err: c.err.Error()}
+				outcomes[c.id] = failed(StateFailed)
 				settle(c.id, StateFailed)
 				// A cancelled parent must finalize as Cancelled even if this
 				// completion is observed before the ctxDone branch runs.
@@ -427,7 +462,7 @@ func (s *Scheduler) run(parent context.Context, wf *domain.Workflow, opts RunOpt
 					return
 				}
 			}
-			outcomes[c.id] = NodeOutcome{State: StateFailed, Err: c.err.Error()}
+			outcomes[c.id] = failed(StateFailed)
 			settle(c.id, StateFailed)
 			if pol.Mode != domain.FailContinue {
 				halt(fmt.Errorf("%w: %q: %v", ErrNodeFailed, c.id, c.err))
@@ -438,19 +473,18 @@ func (s *Scheduler) run(parent context.Context, wf *domain.Workflow, opts RunOpt
 		outcomes[c.id] = NodeOutcome{State: StateSucceeded, Hash: c.res.Hash, Type: c.res.Type, CostUSD: c.res.CostUSD, Tokens: c.res.Tokens}
 		budget.add(c.res.CostUSD, c.res.Tokens)
 		settle(c.id, StateSucceeded)
-		if budget.exceeded() {
-			payload := budget.status()
-			err := diagnostic.Wrap(ErrBudgetExceeded, diagnostic.KindBudget, "budget_exceeded", c.id, "budget.check", "execution exceeded its configured budget", "raise the budget or reduce workflow cost, tokens, or duration")
-			payload["diagnostic"] = diagnostic.Payload(err, c.id)
-			s.emit(execID, domain.BudgetExceeded, "", payload)
-			halt(err)
-		} else if budget.shouldWarn() {
-			s.emit(execID, domain.BudgetWarning, "", budget.status())
-		}
+		checkBudget(c.id)
 	}
 
 	// --- Coordinator loop. ---
-	processDecisions()
+	// A resumed run whose recorded spend already crosses a limit halts here,
+	// before dispatching anything (REQ-BUDGET-01: before the spend, not after).
+	if !fresh {
+		checkBudget("")
+	}
+	if !halted {
+		processDecisions()
+	}
 	ctxDone := ctx.Done()
 	for inFlight > 0 || (len(ready) > 0 && !halted) {
 		var taskCh chan task

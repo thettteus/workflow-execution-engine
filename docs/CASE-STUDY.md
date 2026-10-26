@@ -32,16 +32,21 @@ succeeded, and the two that didn't are the more interesting result:
 - **[google/uuid PR #171](https://github.com/google/uuid/pull/171)** — the reviewer correctly found the
   regression, but the only safe correction was identical to the base file, so there was nothing to commit.
   Rejected rather than manufacturing an unrelated change to force a result.
-- **[go-chi/chi PR #1142](https://github.com/go-chi/chi/pull/1142)** — first attempt: the Fixer's proposed
-  file was file-shaped but silently dropped the original copyright header. The verifier caught this and
-  rejected it *before* the approval checkpoint — the intended fail-closed path, not a bug. That rejection
-  drove three concrete hardening changes (ordered-fallback review, forcing raw-JSON full-file output, a
-  stronger model for the two full-file reasoning steps) before the second attempt against the same PR
-  succeeded end to end.
+- **[go-chi/chi PR #1142](https://github.com/go-chi/chi/pull/1142)** — first attempt: the extraction
+  Worker that builds the original file's URL used the PR's *head* commit instead of its *base* commit,
+  against its own constraint. The Fixer was therefore handed the already-patched file and returned it
+  byte-for-byte unchanged. The verifier rejected it *before* the approval checkpoint — the right outcome —
+  but its stated reason ("a diff fragment, not a full file") was wrong. An earlier version of this page
+  said the rejection was for a dropped copyright header; the recorded execution does not support that, and
+  the file has no such header. Later attempts drove the hardening that preceded the accepted run
+  (ordered-fallback review, forcing raw-JSON full-file output, a stronger model for the two full-file
+  reasoning steps), and the URL field now has to pin a full commit sha.
 
-That sequence — two clean rejections and targeted hardening before the accepted run — is the actual claim
-being made: a producer's unreliability degrades to "nothing happens," never to "something wrong got
-applied."
+That sequence is the actual claim being made, and its limit: a producer's unreliability — even a wrong
+identifier plus a judge with the wrong explanation — degraded to "nothing happens," never to "something
+wrong got applied." The guarantee comes from layering (a schema-checked boolean gating a deterministic edge,
+then a human approval of the exact input), not from any one model being right; nothing in it verifies that a
+model-transcribed identifier is the *correct* one.
 
 ## The successful run
 

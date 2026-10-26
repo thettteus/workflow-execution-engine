@@ -79,29 +79,34 @@ func (e *WorkerExecutor) Execute(ctx context.Context, req NodeRequest) (NodeResu
 		return NodeResult{}, mapProviderError(req.Node.ID, err)
 	}
 
+	// The call is billed whether or not its output clears the contract, so the
+	// spend is computed before enforcement and carried on a rejection too.
+	providerName := w.Model.Provider
+	if providerName == "" {
+		providerName = model.DefaultProvider
+	}
+	callCost := cost.Compute(providerName, w.Model.Model, resp.InputTokens, resp.OutputTokens)
+	callTokens := resp.InputTokens + resp.OutputTokens
+
 	output := []byte(resp.Content)
 	if verr := contract.Enforce(w.Contract, output); verr != nil {
 		var ve *contract.ViolationError
 		if errors.As(verr, &ve) {
 			// Retryable with delta feedback, bounded by contract.maxRetries.
 			err = diagnostic.Wrap(ve, diagnostic.KindValidation, "contract_violation", req.Node.ID, "contract.enforce", "output failed the node's Contract", "adjust the Worker goal or output schema so the model returns valid JSON")
-			return NodeResult{}, ContractViolation(err, ve.Feedback, w.Contract.MaxRetries)
+			return NodeResult{}, WithSpend(ContractViolation(err, ve.Feedback, w.Contract.MaxRetries), callCost, callTokens)
 		}
 		// A malformed outputSchema is a configuration fault, not a violation.
 		err = fmt.Errorf("engine: node %q: %w", req.Node.ID, verr)
-		return NodeResult{}, Fatal(diagnostic.Wrap(err, diagnostic.KindValidation, "contract_schema_invalid", req.Node.ID, "contract.compile", "Contract output schema is invalid", "fix the Worker Contract schema before running"))
+		return NodeResult{}, WithSpend(Fatal(diagnostic.Wrap(err, diagnostic.KindValidation, "contract_schema_invalid", req.Node.ID, "contract.compile", "Contract output schema is invalid", "fix the Worker Contract schema before running")), callCost, callTokens)
 	}
 
-	providerName := w.Model.Provider
-	if providerName == "" {
-		providerName = model.DefaultProvider
-	}
 	return NodeResult{
 		Content:       output,
 		Type:          domain.ArtifactJSON,
 		MimeType:      "application/json",
-		CostUSD:       cost.Compute(providerName, w.Model.Model, resp.InputTokens, resp.OutputTokens),
-		Tokens:        resp.InputTokens + resp.OutputTokens,
+		CostUSD:       callCost,
+		Tokens:        callTokens,
 		Validated:     true,
 		ContextHashes: policy.Hashes(admitted),
 	}, nil
@@ -124,6 +129,15 @@ func (e *WorkerExecutor) CacheKey(node domain.Node, inputs []NodeInput, workflow
 	if err != nil {
 		return "", false
 	}
+	// The whole definition, minus Description (documentation only, never sent
+	// to the model), so an in-place edit of objective or constraints at an
+	// unchanged version still invalidates the key.
+	def := w
+	def.Description = ""
+	definitionHash, err := canonical.Hash(def)
+	if err != nil {
+		return "", false
+	}
 	hashes := make([]string, 0, len(inputs))
 	for _, in := range inputs {
 		hashes = append(hashes, in.Hash)
@@ -141,6 +155,7 @@ func (e *WorkerExecutor) CacheKey(node domain.Node, inputs []NodeInput, workflow
 		Model:               w.Model,
 		ToolVersions:        w.Tools,
 		ContextPolicy:       pol,
+		DefinitionHash:      definitionHash,
 	}), true
 }
 

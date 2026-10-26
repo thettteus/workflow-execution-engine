@@ -54,6 +54,11 @@ http://localhost:7676
 
 Use the Templates picker to import a workflow into the `/workflows` volume.
 
+The control plane has no authentication yet (planned for M2.7), so `compose.yaml` publishes port 7676 on
+`127.0.0.1` only. Do not change it to every interface, or put it behind a reverse proxy without
+authentication. Anything that can reach the port can change settings, set secrets, approve mutations, and
+start runs ([threat-model.md](threat-model.md) §6).
+
 Provider keys are optional until a workflow needs them. Put them in a local, untracked
 `compose.override.yaml`; Compose passes them to the container, and `wee` still treats those values as
 environment secrets rather than persisted settings.

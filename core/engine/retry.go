@@ -46,6 +46,37 @@ func ContractViolation(err error, feedback string, maxRetries int) error {
 // Fatal marks err as non-retryable.
 func Fatal(err error) error { return fatalError{err} }
 
+// spendError carries what a failed attempt already cost: a model call whose
+// output the contract then rejected was still billed by the provider. It wraps
+// a classified error without changing its class, so the engine can count the
+// spend toward the node and the budget (REQ-BUDGET-03) whether or not the node
+// eventually succeeds.
+type spendError struct {
+	err     error
+	CostUSD float64
+	Tokens  int64
+}
+
+func (e spendError) Error() string { return e.err.Error() }
+func (e spendError) Unwrap() error { return e.err }
+
+// WithSpend attaches a failed attempt's cost and tokens to err.
+func WithSpend(err error, costUSD float64, tokens int64) error {
+	if costUSD == 0 && tokens == 0 {
+		return err
+	}
+	return spendError{err: err, CostUSD: costUSD, Tokens: tokens}
+}
+
+// spendOf returns the cost and tokens a failed attempt recorded via WithSpend.
+func spendOf(err error) (float64, int64) {
+	var se spendError
+	if errors.As(err, &se) {
+		return se.CostUSD, se.Tokens
+	}
+	return 0, 0
+}
+
 type errorClass int
 
 const (

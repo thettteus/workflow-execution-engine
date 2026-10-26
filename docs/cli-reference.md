@@ -113,7 +113,8 @@ wee inspect exec-abc123 --node reviewer
 Two distinct modes, never conflated (see [concepts/execution.md](concepts/execution.md)):
 
 - `wee replay <id>` — **audit**: reconstructs the recorded timeline from disk alone, zero model calls, zero
-  cost.
+  cost. It then verifies the event log's hash chain (ADR 0007). It prints `integrity: hash chain verified`,
+  or `integrity: FAILED — hash chain broken at event line N` and exits `3`.
 - `wee replay <id> --execute` — **re-execute**: runs the frozen workflow again; unchanged nodes are served
   from cache, only invalidated nodes re-run. Reports which nodes were cached vs. re-executed. A
   re-executed LLM node's output is **not** guaranteed identical — see [replay-honesty.md](replay-honesty.md).

@@ -20,9 +20,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -183,14 +186,19 @@ func New(cfg Config) *Server {
 	return s
 }
 
-// Handler returns the HTTP handler (CORS-wrapped so the Vite dev server on a
-// different origin can call it).
+// Handler returns the HTTP handler, wrapped in the origin policy (withCORS) that
+// lets the local UI — the Vite dev server on another loopback port, or the
+// --ui-dir build on this same origin — call it, and refuses every other origin.
 func (s *Server) Handler() http.Handler { return withCORS(s.mux) }
 
 // ListenAndServe runs the server until the process exits. No write timeout is
 // set: the live WebSocket connection is deliberately long-lived.
 func (s *Server) ListenAndServe(addr string) error {
-	srv := &http.Server{Addr: addr, Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	h := s.Handler()
+	if isLoopbackAddr(addr) {
+		h = withLoopbackHost(h)
+	}
+	srv := &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 10 * time.Second}
 	return srv.ListenAndServe()
 }
 
@@ -271,12 +279,12 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 // engine/scheduler.go), at which point the connection is closed with a normal
 // closure status. A transient read error (log not yet created, or a torn
 // trailing line under a concurrent append) is retried on the next tick, never
-// surfaced — no event is lost or duplicated. OriginPatterns is permissive
-// (matching withCORS below): this is a local dev tool, and the origin check is
-// WebSocket's own cross-origin gate — the CORS headers withCORS sets have no
-// effect on the upgrade itself.
+// surfaced — no event is lost or duplicated. OriginPatterns admits the same
+// loopback UI origins withCORS does (same-origin is always allowed by the
+// library): the origin check is WebSocket's own cross-origin gate — the CORS
+// headers withCORS sets have no effect on the upgrade itself.
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: loopbackOriginPatterns})
 	if err != nil {
 		return // Accept already wrote the appropriate HTTP error response
 	}
@@ -714,6 +722,17 @@ func (s *Server) handleSecretsStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, status)
 }
 
+// secretNameRE bounds which env vars /api/secrets may set or clear to names
+// shaped like credentials. The variables are inherited by every tool subprocess
+// (go, git, ...), so an unrestricted name would let a caller rewrite PATH,
+// GOFLAGS, GIT_*, proxy settings, or WEE_WORKSPACE_ROOT — process control, not a
+// secret.
+var secretNameRE = regexp.MustCompile(`^[A-Z][A-Z0-9_]*_(KEY|TOKEN|AUTH_HEADER|SECRET|PASSWORD)$`)
+
+func secretNameHint(name string) string {
+	return fmt.Sprintf("%q is not a credential env var name: use UPPER_SNAKE_CASE ending in _KEY, _TOKEN, _AUTH_HEADER, _SECRET or _PASSWORD", name)
+}
+
 type setSecretRequest struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
@@ -735,6 +754,10 @@ func (s *Server) handleSetSecret(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "name is required", http.StatusBadRequest)
 		return
 	}
+	if !secretNameRE.MatchString(req.Name) {
+		http.Error(w, secretNameHint(req.Name), http.StatusBadRequest)
+		return
+	}
 	if err := os.Setenv(req.Name, req.Value); err != nil {
 		http.Error(w, "set "+req.Name+": "+err.Error(), http.StatusBadRequest)
 		return
@@ -748,6 +771,10 @@ func (s *Server) handleUnsetSecret(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
 	if name == "" {
 		http.Error(w, "name is required", http.StatusBadRequest)
+		return
+	}
+	if !secretNameRE.MatchString(name) {
+		http.Error(w, secretNameHint(name), http.StatusBadRequest)
 		return
 	}
 	_ = os.Unsetenv(name)
@@ -880,7 +907,9 @@ func summarize(id string, events []domain.Event) ExecutionSummary {
 				sum.State = st
 			}
 			finishedAt = ev.Timestamp
-		case domain.WorkerFinished:
+		case domain.WorkerFinished, domain.Failure:
+			// A Failure carries the spend of attempts that were billed but
+			// rejected (REQ-BUDGET-03); a WorkerFinished, the node's total.
 			if c, ok := ev.Payload["costUsd"].(float64); ok {
 				sum.SpentCostUSD += c
 			}
@@ -901,18 +930,83 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// withCORS allows the browser UI (served from the Vite dev origin) to call this
-// API cross-origin. It is a local dev tool; the permissive policy is scoped to
-// that. Preflight OPTIONS is answered here so every route need not register it.
+// loopbackOriginPatterns are the WebSocket origin patterns (matched against the
+// Origin's host[:port]) for a UI served from a loopback address.
+var loopbackOriginPatterns = []string{"localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*", `\[::1\]`, `\[::1\]:*`}
+
+// withCORS is the control plane's origin policy. The API has no authentication
+// yet (M2.7), so a browser origin is the only thing standing between a page the
+// user happens to visit and endpoints that change settings, set env vars,
+// approve mutations, or start runs. A request carrying an Origin is served only
+// when that origin is this server's own (the --ui-dir build) or a loopback one
+// (the Vite dev server); anything else is refused before it reaches a handler.
+// A request with no Origin is not a browser cross-origin request (curl, the
+// CLI) and passes. Allowed origins are echoed, never "*". Preflight OPTIONS is
+// answered here so every route need not register it.
 func withCORS(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if origin := r.Header.Get("Origin"); origin != "" {
+			w.Header().Add("Vary", "Origin")
+			if !allowedOrigin(origin, r.Host) {
+				http.Error(w, "cross-origin request refused: "+origin+" is not a local UI origin", http.StatusForbidden)
+				return
+			}
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		h.ServeHTTP(w, r)
 	})
+}
+
+// allowedOrigin reports whether a browser Origin may call this server: its own
+// origin (same host:port as the request), or any http(s) loopback origin.
+func allowedOrigin(origin, host string) bool {
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return false
+	}
+	if strings.EqualFold(u.Host, host) {
+		return true
+	}
+	return isLoopbackHost(u.Hostname())
+}
+
+// withLoopbackHost rejects requests whose Host header is not a loopback name,
+// for a server listening only on loopback. Without it, DNS rebinding (an
+// attacker's domain re-resolved to 127.0.0.1) would make that domain's pages
+// same-origin with this server and pass withCORS.
+func withLoopbackHost(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := r.Host
+		if hh, _, err := net.SplitHostPort(host); err == nil {
+			host = hh
+		}
+		if !isLoopbackHost(host) {
+			http.Error(w, "refused: Host "+r.Host+" is not a loopback name", http.StatusMisdirectedRequest)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
+// isLoopbackAddr reports whether a listen address binds only loopback.
+func isLoopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	return isLoopbackHost(host)
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
 }

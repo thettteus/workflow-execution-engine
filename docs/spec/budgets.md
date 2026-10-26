@@ -12,8 +12,16 @@ The engine shall check the budget before each node dispatch and before each mode
 execution the moment a limit is crossed — emitting `BudgetExceeded` and returning the distinct
 `ErrBudgetExceeded` (CLI exit code 2).
 - **Rationale:** PRIN-05 — the halt happens *before* the next spend, not after the invoice.
+- **Implementation note:** spend changes only when a node completes, so the check runs on every
+  completion, successful or failed. That is the point where new nodes become dispatchable, so no node is
+  dispatched past a crossed limit. Two consequences follow. In-flight parallel nodes, and the retries inside
+  one node, are not interrupted, so a run can overshoot by up to that work. A resumed run (every approval is
+  one) is the same execution: the cost and tokens recorded by earlier segments seed its tracker, and it
+  halts before dispatching anything if they already cross a limit. Duration restarts per segment, because
+  time spent paused for a human is not execution time.
 - **Delivered by:** M1.3 (halt mechanics), M1.4 (real cost feed). **Verified by:**
-  `TestBudgetExceededHalts`; _pending_ M1.4 real-cost test.
+  `TestBudgetExceededHalts`, `TestFailedSpendCanExhaustBudget`, `TestResumeContinuesRecordedBudget`;
+  _pending_ M1.4 real-cost test.
 
 ### REQ-BUDGET-02 — Early warning
 When cumulative spend crosses 80% of any budget dimension, the engine shall emit `BudgetWarning` exactly
@@ -23,6 +31,15 @@ once for that dimension.
 
 ### REQ-BUDGET-03 — Accurate per-call accounting
 When a model call completes, the engine shall record input/output tokens and compute cost from the
-provider's published rates, aggregated per node and rolled up per execution (feeding REQ-METRIC-01).
+provider's published rates, aggregated per node and rolled up per execution (feeding REQ-METRIC-01). This
+holds whether or not the call's output clears its contract: a rejected attempt was still billed.
+- **Implementation note:** a rejected attempt's spend travels with its error (`engine.WithSpend`).
+  - A node that later succeeds reports the total of all its attempts on `WorkerFinished`.
+  - A node that fails reports the spend of its rejected attempts on `Failure` (`costUsd`/`tokens`).
+  - `Retry` carries each attempt's `attemptCostUsd`/`attemptTokens`, for information only.
+
+  Before 2026-10-25, only the final, successful attempt was counted. A call cut off by cancellation or a
+  transport error returns no usage, so it still cannot be priced.
 - **Delivered by:** M1.4 (`core/cost/accounting.go`). **Verified by:** `cost` package tests; real per-call
-  cost surfaced through `NodeResult.CostUSD` (`engine.TestNoMalformedOutputCrossesBoundary` asserts it is priced).
+  cost surfaced through `NodeResult.CostUSD` (`engine.TestNoMalformedOutputCrossesBoundary` asserts it is
+  priced); `engine.TestRejectedAttemptSpendIsCounted`, `engine.TestFailedNodeSpendIsCounted`.

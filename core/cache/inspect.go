@@ -41,7 +41,6 @@ func (c *Cache) Clear() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.index = make(map[string]Entry)
-	c.loaded = true
 	return c.save()
 }
 

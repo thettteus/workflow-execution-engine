@@ -65,9 +65,12 @@ Likewise, WEE is not an AI agent framework. Models are workers inside the runtim
 
 In the places engineering work already happens — never in a chat window:
 
-- **CI** — a webhook fires a change-review workflow; the result lands wherever that integration chooses.
+- **CI** — a pipeline step runs `wee run` against a change-review workflow and branches on its exit code;
+  the result lands wherever that integration chooses. (There is no built-in webhook receiver yet.)
 - **The terminal** — `wee run` locally, like git or terraform.
-- **Cron / hooks** — scheduled research digests, pre-push review gates.
+- **Cron / hooks** — the system scheduler or a git hook invokes `wee run` for scheduled research digests or
+  pre-push review gates. (There is no built-in scheduler or trigger store yet; runs live in the process that
+  started them.)
 - **The editor's neighbor** — the UI is a client of the same event stream the CLI prints.
 
 ---

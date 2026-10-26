@@ -115,15 +115,24 @@ func (a *Auditor) Audit(executionID string) (Timeline, error) {
 		case domain.WorkerFinished:
 			rec.State = engine.StateSucceeded
 			if c, ok := ev.Payload["costUsd"].(float64); ok {
-				rec.CostUSD = c
+				rec.CostUSD += c
 			}
 			if t, ok := ev.Payload["tokens"].(float64); ok {
-				rec.Tokens = int64(t)
+				rec.Tokens += int64(t)
 			}
 		case domain.Failure:
 			rec.State = engine.StateFailed
 			if e, ok := ev.Payload["error"].(string); ok {
 				rec.Err = e
+			}
+			// Rejected-but-billed attempts (REQ-BUDGET-03). Summed, like
+			// WorkerFinished, so a node failed in one segment and finished in a
+			// resumed one reports everything it spent.
+			if c, ok := ev.Payload["costUsd"].(float64); ok {
+				rec.CostUSD += c
+			}
+			if t, ok := ev.Payload["tokens"].(float64); ok {
+				rec.Tokens += int64(t)
 			}
 		}
 		nodes[ev.NodeID] = rec

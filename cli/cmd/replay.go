@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -50,12 +51,26 @@ func newReplayCmd() *cobra.Command {
 }
 
 func runReplayAudit(cmd *cobra.Command, execID string, f replayFlags) error {
-	aud := replay.NewAuditor(eventlog.New(f.workspace), store.New(f.workspace))
+	log := eventlog.New(f.workspace)
+	aud := replay.NewAuditor(log, store.New(f.workspace))
 	tl, err := aud.Audit(execID)
 	if err != nil {
 		return coded(ExitValidation, err)
 	}
 	printTimeline(cmd.OutOrStdout(), tl)
+	// An audit that reconstructs a timeline without checking it is only a
+	// display: verify the hash chain (REQ-EVENT-03, ADR 0007) and fail the audit
+	// on a break, after printing what was recorded so the break can be located.
+	if err := log.Verify(execID); err != nil {
+		var ce *eventlog.ChainError
+		if errors.As(err, &ce) {
+			fmt.Fprintf(cmd.OutOrStdout(), "integrity: FAILED — hash chain broken at event line %d\n", ce.Line)
+		} else {
+			fmt.Fprintln(cmd.OutOrStdout(), "integrity: FAILED")
+		}
+		return coded(ExitValidation, fmt.Errorf("event log failed hash-chain verification: %w", err))
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), "integrity: hash chain verified")
 	return nil
 }
 

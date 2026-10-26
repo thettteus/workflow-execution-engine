@@ -58,6 +58,9 @@ func (r *humanRenderer) Event(ev domain.Event) {
 	case domain.ContractViolation:
 		fmt.Fprintf(r.w, "  %s %s  %s\n", styleWarn.Render("⚠"), ev.NodeID, styleDim.Render("contract violation"))
 	case domain.Failure:
+		// Attempts the contract rejected were still billed (REQ-BUDGET-03).
+		r.cost += num(ev.Payload["costUsd"])
+		r.toks += int64(num(ev.Payload["tokens"]))
 		fmt.Fprintf(r.w, "  %s %s  %s\n", styleFail.Render("✗"), ev.NodeID, str(ev.Payload["error"]))
 	case domain.BudgetWarning:
 		fmt.Fprintln(r.w, styleWarn.Render("  ! budget warning"))
