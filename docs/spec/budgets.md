@@ -12,8 +12,16 @@ The engine shall check the budget before each node dispatch and before each mode
 execution the moment a limit is crossed — emitting `BudgetExceeded` and returning the distinct
 `ErrBudgetExceeded` (CLI exit code 2).
 - **Rationale:** PRIN-05 — the halt happens *before* the next spend, not after the invoice.
+- **Implementation note:** spend changes only when a node completes, so the check runs on every
+  completion, successful or failed. That is the point where new nodes become dispatchable, so no node is
+  dispatched past a crossed limit. Two consequences follow. In-flight parallel nodes, and the retries inside
+  one node, are not interrupted, so a run can overshoot by up to that work. A resumed run (every approval is
+  one) is the same execution: the cost and tokens recorded by earlier segments seed its tracker, and it
+  halts before dispatching anything if they already cross a limit. Duration restarts per segment, because
+  time spent paused for a human is not execution time.
 - **Delivered by:** M1.3 (halt mechanics), M1.4 (real cost feed). **Verified by:**
-  `TestBudgetExceededHalts`; _pending_ M1.4 real-cost test.
+  `TestBudgetExceededHalts`, `TestFailedSpendCanExhaustBudget`, `TestResumeContinuesRecordedBudget`;
+  _pending_ M1.4 real-cost test.
 
 ### REQ-BUDGET-02 — Early warning
 When cumulative spend crosses 80% of any budget dimension, the engine shall emit `BudgetWarning` exactly

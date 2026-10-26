@@ -266,6 +266,15 @@ func (s *Scheduler) run(parent context.Context, wf *domain.Workflow, opts RunOpt
 	}
 
 	budget := newBudgetTracker(opts.Budget, s.now)
+	if !fresh {
+		// A resumed run (every approval is one) continues the same execution's
+		// budget: cost and tokens its earlier segments recorded still count.
+		// Duration deliberately restarts — time spent paused waiting on a human
+		// approval is not execution time.
+		cost, tokens, warned := s.recordedSpend(execID)
+		budget.add(cost, tokens)
+		budget.warned = warned
+	}
 	backoff := exponentialBackoff(opts.RetryBackoff, opts.RetryBackoffMax)
 	cacheMode := s.normalizeCacheMode(opts.Cache)
 	approvals := s.approvalRecords(execID)
@@ -468,7 +477,14 @@ func (s *Scheduler) run(parent context.Context, wf *domain.Workflow, opts RunOpt
 	}
 
 	// --- Coordinator loop. ---
-	processDecisions()
+	// A resumed run whose recorded spend already crosses a limit halts here,
+	// before dispatching anything (REQ-BUDGET-01: before the spend, not after).
+	if !fresh {
+		checkBudget("")
+	}
+	if !halted {
+		processDecisions()
+	}
 	ctxDone := ctx.Done()
 	for inFlight > 0 || (len(ready) > 0 && !halted) {
 		var taskCh chan task
